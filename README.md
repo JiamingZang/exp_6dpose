@@ -12,7 +12,8 @@
 > **逆深度混合反投影**（与训练监督同一渲染，非 μ 位置混合，§3-4）；
 > （5）重训后**固定模板视图**（复用旧 poses，防止与阶段 2 像素对应错位，§4）；
 > （6）对称物体 PnP 支持 **BOP 离散对称展开**（`ransac_pnp(..., sym_transforms)`，§7）。
-> 完整实验过程与数据见 [`docs/RESEARCH_LOG.md`](docs/RESEARCH_LOG.md)，
+> 完整实验过程与数据见 [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md)（实验报告）
+> 与 [`docs/RESEARCH_LOG.md`](docs/RESEARCH_LOG.md)（研究时间线），
 > 会话原始日志（脱敏）见 `docs/session/`。
 
 ## 方法管线（论文 2.6.4 算法 1）
