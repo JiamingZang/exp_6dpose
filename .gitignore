@@ -16,3 +16,4 @@ env.sh
 .venv/
 *.log
 third_party/mast3r/
+.ipynb_checkpoints/
