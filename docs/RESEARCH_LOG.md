@@ -148,3 +148,82 @@ driller 95.0 / cam 55.8。
   （投影对但 ADD 错，逐帧深度误差）与 M 类（匹配对应不足）混合；
 - 定位提速与 top_k=10 匹配提速已实现（批量 CLS + 背景填色一致，
   `src/detection/localize.py`），未做端到端验证。
+
+## §10. ape 背景事故 + D 类深度诊断（2026-08-02）
+
+### ape 事故（数据可信性）
+1. rerun13_bg0 链只重训/重提取 12 物体，**漏了 ape**；汇总表里
+   ape 50.0 实际是白背景旧 matches + 白背景 bank 评的，标"黑"是错的。
+2. ape 全量黑背景 extract 用 `dense80_batch8.yaml`（继承默认
+   `onboard.bg_color: 1.0`）→ 裁剪填白背景去匹配黑背景 bank 模板，
+   域不匹配 → 全量 ADD 32.4 作废。
+3. 修复（机制层）：bank npz 写入 `bg_color` 字段（onboard +
+   rebuild_bank_fixed_views）；TemplateBank 读取；
+   extract_matches 校验 bank.bg_color ≠ cfg 时直接报错。
+   新配置 `configs/dense80_batch8_bg0.yaml`（bg_color 显式 0.0）。
+4. 教训：任何"训练背景/模板背景/裁剪填充背景"三处一致性都应在
+   产物中记录并在下游校验，不能靠配置默认值传递。
+
+### D 类锚点诊断（scripts/diag_dclass.py，CPU）
+- **coord_map 即物体系 3D 点，PnP 直接查表（pipeline.py:706），
+  不需要再乘模板位姿**——诊断最初多乘了一次模板位姿变换，
+  得到 -26% 假偏差；修正后：
+- duck 120 帧匹配锚点深度偏差：边缘 median -0.2%、内部 -0.2%，
+  逐帧 median -0.85%，无帧超 ±2% → **锚点本身是准的**。
+- D 类真实失败模式（cache13_ds 逐帧 trans/rot）：
+  - 双峰：约 20% 帧整体错（duck rot 8°/holepuncher rot 19.6°，
+    模板选错或匹配崩）；其余帧 trans 10-35mm，恰好卡在
+    ADD@0.1d 阈值（duck 直径 ~102mm → 阈值 10.2mm）边缘。
+  - eggbox 对照：成功帧 trans med 6.9mm（阈值 15.4mm，富余）。
+- 结论：D 类 = 部分"坏帧"（候选/模板选择） + 部分"tz 噪声带"
+  （PnP 深度条件数，亚像素误差在 ~930mm 距离放大 ~1% tz）。
+  光度精化（refine_pose，150 iter）已在跑但未救回 duck
+  （消融验证中：dense80_norefine.yaml）。
+
+### 缓存机制加固（同日）
+- evaluate_object 帧级缓存新增内容指纹：首行 meta（matches_dir + 配置
+  哈希），不匹配整体作废；追加模式保证 4 分片并行共享安全。
+- 事故：ape 子集 stage3 复用 cache13_ds/ape.jsonl 旧缓存（12:53 白背景
+  结果）→ 停掉重跑。cache13_ds 等无 meta 的旧缓存全部视为陈旧。
+
+### D 类修复：查询侧深度一致性（进行中）
+- 失败模式量化（duck no-refine）：120 帧中 29 帧整体错（rot med 45°，
+  模板/匹配崩）+ 59 帧近失（Proj 对但 ADD 错：trans med 21mm、rot med
+  6.1°，阈值 10.2mm）——即 tz/rot 噪声带。
+- 光度精化（refine_pose，150 iter L1+SSIM+LPIPS+Dice）贡献仅 +5.0 ADD
+  （26.7→31.7），救不回噪声带。
+- 实现（代码完成，待 extract 重跑验证）：
+  1. TemplateMatch/落盘新增 pts3d_q（MASt3R 成对重建查询侧 3D，度量尺度）
+  2. ransac_pnp 新增 _ransac_pnp_depth：内点 = 重投影<ε 且深度比自校准
+     后 |z_a - c·z_q| < 5%·c·z_q——把 5px 阈值内的错误对应按 3D 结构剔除
+  3. 配置 solver.depth_consistency / depth_tau_frac（dense80_depthc*.yaml）
+- 对照实验设计：duck 120 帧新 extract（batch8×2，~10min）→
+  depthc_norefine stage3（快）对比 26.7 基线；有效再叠加 photometric refine。
+
+## §11. ape 真值排查 + 全物体受控重跑（08-02 晚，结案）
+
+### 排查结论（全部受控，120 帧子集，同代码）
+| 配置 | ADD | 说明 |
+|---|---|---|
+| 黑0.6+高斯锚点 | 30.8 | 轮7/8 配方，ape 真值 |
+| 黑0.3+高斯锚点 | 27.5 | depth 权重降低无益 |
+| 黑0.3+CAD锚点 | 31.7 | CAD 锚点 ≈ 高斯锚点（0.6 深度监督已拉准 μ） |
+| 白0.6+高斯锚点 | 11.7 | 白背景训练对 ape 明显差 |
+| 白0.3+CAD锚点 | 36.7 | fv 配方复刻；训练曲线与 19:53 逐项一致仍到不了 50 |
+| 白0.3+CAD(12:53 假) | 50.0 | 不可复现的历史状态，作废 |
+
+- 背景色通过训练梯度影响 densify：白训练 30k 高斯 vs 黑 21k，
+  但受控结果仍显示黑背景更稳。
+- 关键教训：**0.6 深度监督已把 μ 拉准**（高斯锚点 ≈ CAD 锚点），
+  在线匹配保持纯 3DGS 几何（无 CAD），符合"未知物体"设定。
+
+### 事故与修复
+- 批量 patch_cad_coord_maps 时未验证备份逻辑（`.orig` 存在即不备份），
+  12 物体黑 0.6 高斯库被覆盖丢失 → 全量重训（黑0.6×10/白0.6×2）
+  + 重提取 120 帧 + 重评估（4 并行 → 2 并行，3 进程 extract 即 OOM）。
+- 教训：批量破坏性操作前必须验证备份完整与回滚路径。
+
+### 结案数字（13 物体 × 120 帧，全真）
+MEAN ADD 67.44 / Proj 81.54 / 5cm5° 66.54（ape 30.8 为真值；
+cat 53.3 / phone 62.5 / duck 33.3 / can 90.0 较旧表提升；
+holepuncher 24.2 最弱）。

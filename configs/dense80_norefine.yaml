@@ -1,0 +1,5 @@
+base: dense80_depth_bg0.yaml
+
+solver:
+  refine_pose: false
+  guided_refine: false

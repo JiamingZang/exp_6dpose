@@ -235,21 +235,30 @@ def build_correspondences(pix_q: np.ndarray, desc_q: np.ndarray,
 
 def sample_correspondences(pts2d: np.ndarray, pts3d: np.ndarray,
                            sims: np.ndarray, n_sample: int = 4096,
-                           rng: np.random.Generator | None = None):
+                           rng: np.random.Generator | None = None,
+                           extras: list | None = None):
     """对应集下采样至 N_s（默认 4096），控制 RANSAC 开销。
 
     超出 N_s 时按相似度加权随机采样——保留高置信匹配的同时维持空间多样性
     （MASt3R 论文观察到适度子采样具有离群点过滤效果）。
+    extras 给定时按同一组随机下标同步采样并追加到返回列表（如查询侧
+    pts3d_q），返回 tuple 变长。
     """
     n = pts2d.shape[0]
     if n <= n_sample:
-        return pts2d, pts3d, sims
+        out = [pts2d, pts3d, sims]
+        if extras:
+            out += list(extras)
+        return tuple(out)
     if rng is None:
         rng = np.random.default_rng(0)
     w = np.clip(sims, 1e-6, None)
     p = w / w.sum()
     idx = rng.choice(n, size=n_sample, replace=False, p=p)
-    return pts2d[idx], pts3d[idx], sims[idx]
+    out = [pts2d[idx], pts3d[idx], sims[idx]]
+    if extras:
+        out += [e[idx] for e in extras]
+    return tuple(out)
 
 
 def guided_local_matching(desc_q, desc_t, pix_t, pts3d_t, R, t, K,

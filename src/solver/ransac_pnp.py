@@ -55,7 +55,9 @@ def ransac_pnp(pts2d: np.ndarray, pts3d: np.ndarray, K: np.ndarray,
                iterations: int = 1000, refine_lm: bool = True,
                min_correspondences: int = 6,
                flag: str = "epnp",
-               sym_transforms: Optional[List[np.ndarray]] = None) -> PnPResult:
+               sym_transforms: Optional[List[np.ndarray]] = None,
+               pts3d_q: Optional[np.ndarray] = None,
+               depth_tau_frac: float = 0.0) -> PnPResult:
     """RANSAC-EPnP + LM 精化。
 
     Args:
@@ -83,6 +85,11 @@ def ransac_pnp(pts2d: np.ndarray, pts3d: np.ndarray, K: np.ndarray,
         return _ransac_pnp_sym(pts2d, pts3d, K, sym_transforms, reproj_px,
                                confidence, iterations, refine_lm,
                                min_correspondences, solver_flag)
+    if pts3d_q is not None and depth_tau_frac > 0:
+        return _ransac_pnp_depth(pts2d, pts3d, pts3d_q, K, reproj_px,
+                                 confidence, iterations, refine_lm,
+                                 min_correspondences, solver_flag,
+                                 depth_tau_frac)
     pts2d = pts2d.reshape(-1, 1, 2)
     pts3d = pts3d.reshape(-1, 1, 3)
 
@@ -200,3 +207,81 @@ def _ransac_pnp_sym(pts2d, pts3d, K, sym_Ts, reproj_px, confidence,
                      n_inliers=len(inl), inlier_idx=inl,
                      n_correspondences=n,
                      mean_inlier_reproj_px=float(e_min[inl].mean()))
+
+
+def _ransac_pnp_depth(pts2d, pts3d, pts3d_q, K, reproj_px, confidence,
+                      iterations, refine_lm, min_correspondences,
+                      solver_flag, depth_tau_frac):
+    """深度一致性 RANSAC-EPnP + LM。
+
+    查询侧 3D（MASt3R 成对重建，查询相机系）与模型侧锚点（物体系）在
+    正确位姿下应当一致：z_anchor ≈ c · z_q（c 为成对尺度与管线尺度的
+    比值，逐候选自校准）。内点 = 重投影 < ε 且深度比相对中位一致
+    |z_a - c·z_q| < tau·c·z_q——把混进 5px 阈值的错误对应（外观歧义
+    表面）按 3D 深度结构剔除，收紧 PnP 的 tz/rot 条件数。
+    """
+    n = len(pts2d)
+    rng = np.random.default_rng(0)
+    fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
+    u_q, v_q = pts2d[:, 0], pts2d[:, 1]
+    z_q = np.maximum(pts3d_q[:, 2], 1e-6)
+    best_inl = min_correspondences
+    best = None
+    for it in range(int(iterations)):
+        idx = rng.choice(n, 4, replace=False)
+        ok, rvec, tvec = cv2.solvePnP(
+            pts3d[idx], pts2d[idx].reshape(-1, 1, 2), K, None,
+            flags=solver_flag)
+        if not ok:
+            continue
+        R, _ = cv2.Rodrigues(rvec)
+        pc = pts3d @ R.T + tvec.reshape(1, 3)     # (N,3) 相机系
+        z_a = pc[:, 2]
+        if (z_a <= 1e-6).all():
+            continue
+        zi = np.maximum(z_a, 1e-9)
+        u = pc[:, 0] / zi * fx + cx
+        v = pc[:, 1] / zi * fy + cy
+        e = np.sqrt((u - u_q) ** 2 + (v - v_q) ** 2)
+        reproj_inl = e < reproj_px
+        if reproj_inl.sum() < 4:
+            continue
+        # 尺度自校准：用重投影内点的深度比中位
+        r = z_a[reproj_inl] / z_q[reproj_inl]
+        c = np.median(r)
+        if c <= 0:
+            continue
+        depth_ok = (np.abs(z_a - c * z_q) < depth_tau_frac * c * z_q)
+        inl = np.nonzero(reproj_inl & depth_ok)[0]
+        if len(inl) > best_inl:
+            best_inl = len(inl)
+            best = (rvec.copy(), tvec.copy(), inl)
+            p = best_inl / n
+            if p > 0:
+                need = int(np.ceil(np.log(1 - confidence)
+                                   / np.log(max(1 - p ** 4, 1e-12))))
+                if it >= need:
+                    break
+    if best is None:
+        return PnPResult(success=False, n_correspondences=n)
+    rvec, tvec, inl = best
+    if refine_lm and len(inl) >= 4:
+        try:
+            rvec, tvec = cv2.solvePnPRefineLM(
+                pts3d[inl], pts2d[inl].reshape(-1, 1, 2), K, None,
+                rvec, tvec)
+        except cv2.error:
+            pass
+    R, _ = cv2.Rodrigues(rvec)
+    pc = pts3d @ R.T + tvec.reshape(1, 3)
+    zi = np.maximum(pc[:, 2], 1e-9)
+    u = pc[:, 0] / zi * fx + cx
+    v = pc[:, 1] / zi * fy + cy
+    e = np.sqrt((u - u_q) ** 2 + (v - v_q) ** 2)
+    inl = np.nonzero(e < reproj_px)[0]
+    if len(inl) < 4:
+        return PnPResult(success=False, n_correspondences=n)
+    return PnPResult(success=True, R=R, t=tvec.reshape(3),
+                     n_inliers=len(inl), inlier_idx=inl,
+                     n_correspondences=n,
+                     mean_inlier_reproj_px=float(e[inl].mean()))

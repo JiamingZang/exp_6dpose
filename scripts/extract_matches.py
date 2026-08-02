@@ -48,6 +48,17 @@ def main():
 
     for obj in objects:
         bank = TemplateBank(template_bank_path(cfg, obj))
+        # 裁剪填色必须与 bank 模板渲染背景一致（浅色物体黑背景、深色物体
+        # 白背景）。bank 记录了自身 bg_color 时以 bank 为准并校验配置，
+        # 不一致直接报错——静默域不匹配会让匹配质量系统性崩坏（ape 事故）。
+        cfg_bg = float(cfg["onboard"].get("bg_color", 1.0))
+        if bank.bg_color is not None and abs(bank.bg_color - cfg_bg) > 1e-6:
+            raise ValueError(
+                f"[{obj}] bank 背景色 {bank.bg_color} ≠ 配置 onboard.bg_color "
+                f"{cfg_bg}：模板黑背景+裁剪白填充（或反之）属于域不匹配，"
+                f"匹配结果不可信。请用与 bank 一致的配置（如 "
+                f"configs/dense80_depth_bg0.yaml 或 dense80_depth_w1.yaml）"
+                f"重新运行，或先重建 bank。")
         # 渲染验证（定位候选消歧）需要 3DGS 参数 ckpt；缺 .pt 时内部跳过
         refiner_ckpt = str(template_bank_path(cfg, obj).with_suffix(".pt"))
         est = PoseEstimator(cfg, bank, device=device,

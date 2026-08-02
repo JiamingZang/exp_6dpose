@@ -43,6 +43,8 @@ class TemplateMatch:
     pix_q: np.ndarray               # (M,2) 查询侧像素（resize 后坐标）
     pix_t: np.ndarray               # (M,2) 模板侧像素（模板原生 256 坐标）
     sims: np.ndarray                # (M,)
+    pts3d_q: np.ndarray | None = None  # (M,3) 查询侧相机系 3D（成对重建，
+                                       # 度量尺度）；PnP 深度一致性用
 
 
 def _resize_to_multiple16(img: np.ndarray, long_side: int):
@@ -375,13 +377,23 @@ class Mast3rMatcher:
                 m_ok = tmpl_of[it] == i
                 if m_ok.sum() == 0:
                     continue
-                p2, p3, ss_ = sample_correspondences(
-                    pix_q_all[iq[m_ok]].astype(np.float64),
-                    pix_t_all[it[m_ok]].astype(np.float64), ss[m_ok],
-                    n_sample=n_sample, rng=rng)
+                p3q_all = desc_cache[sel[0]][3]          # 查询侧 3D 与模板无关
+                if p3q_all is not None:
+                    p2, p3, ss_, p3q = sample_correspondences(
+                        pix_q_all[iq[m_ok]].astype(np.float64),
+                        pix_t_all[it[m_ok]].astype(np.float64), ss[m_ok],
+                        n_sample=n_sample, rng=rng,
+                        extras=[p3q_all[iq[m_ok]]])
+                    p3q = p3q[0]
+                else:
+                    p2, p3, ss_ = sample_correspondences(
+                        pix_q_all[iq[m_ok]].astype(np.float64),
+                        pix_t_all[it[m_ok]].astype(np.float64), ss[m_ok],
+                        n_sample=n_sample, rng=rng)
+                    p3q = None
                 matches.append(TemplateMatch(
                     template_idx=i, score=float(scores[i]),
-                    pix_q=p2, pix_t=p3, sims=ss_))
+                    pix_q=p2, pix_t=p3, sims=ss_, pts3d_q=p3q))
             return matches, (sx, sy), scores, top_full
 
         for i in order:
@@ -434,11 +446,20 @@ class Mast3rMatcher:
             ok = keep & (sims_fwd > sim_threshold)     # 相似度阈值过滤
             iq = idx_q[ok]
             it = nn_q2t[ok]
-            p2, p3, ss = sample_correspondences(
-                pix_q_all[iq].astype(np.float64),
-                pix_t[it].astype(np.float64), sims_fwd[ok],
-                n_sample=n_sample, rng=rng)
+            if p3_q is not None:
+                p2, p3, ss, p3q = sample_correspondences(
+                    pix_q_all[iq].astype(np.float64),
+                    pix_t[it].astype(np.float64), sims_fwd[ok],
+                    n_sample=n_sample, rng=rng,
+                    extras=[p3_q[iq]])
+                p3q = p3q[0]
+            else:
+                p2, p3, ss = sample_correspondences(
+                    pix_q_all[iq].astype(np.float64),
+                    pix_t[it].astype(np.float64), sims_fwd[ok],
+                    n_sample=n_sample, rng=rng)
+                p3q = None
             matches.append(TemplateMatch(
                 template_idx=int(i), score=float(scores[i]),
-                pix_q=p2, pix_t=p3, sims=ss))
+                pix_q=p2, pix_t=p3, sims=ss, pts3d_q=p3q))
         return matches, (sx, sy), scores, top_full

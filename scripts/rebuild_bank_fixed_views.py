@@ -123,6 +123,7 @@ def main():
             "K": old["K"].astype(np.float32),
             "radius": old["radius"], "scale": old["scale"],
             "dino_feats": feats,
+            "bg_color": np.float32(bg),
         }
         backup = str(bp) + ".viewsbak"
         if not Path(backup).exists():

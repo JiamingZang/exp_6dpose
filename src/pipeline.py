@@ -67,6 +67,9 @@ class TemplateBank:
                 f"同上，属 onboard 未跑完的残留文件；请删除后重新运行 "
                 f"scripts/onboard_object.py。")
         self.dino_feats = d["dino_feats"]
+        # 模板渲染背景色（0=黑, 1=白）。缺失（旧库）时 None，extract 侧
+        # 无法校验，只能信配置；新库强制写入，见 onboard_object。
+        self.bg_color = float(d["bg_color"]) if "bg_color" in d else None
         # template_source=depth_map 时 onboard 额外渲染的模板深度图
         # （matching.lifting=depth_backproject 的 2D-3D 提升来源；历史对照
         # 口径，见 VERIFICATION.md §8.1）。缺省 None（坐标图路线）。
@@ -217,6 +220,9 @@ def onboard_object(cfg: Dict, obj_name: str, device: str = "cuda",
 
     bank["dino_feats"] = dino_feats.astype(np.float32)
     bank["scale"] = np.float32(s)
+    # 训练/渲染背景色写入 bank：下游 extract 的裁剪填色必须与此一致，
+    # 否则静默域不匹配（浅色物体黑背景、深色物体白背景，见 EXPERIMENTS）
+    bank["bg_color"] = np.float32(float(cfg["onboard"].get("bg_color", 1.0)))
     # ---- 8. VGGT 路线：重建系→CAD 系相似变换（仅评测对齐）----
     if recon_for_align is not None and ds.model_path.exists():
         cad_verts, _, _ = load_ply(ds.model_path)
@@ -701,6 +707,12 @@ class PoseEstimator:
                 # 坐标图无效像素（背景/alpha 过低置 0）剔除
                 valid = np.abs(pts3d).sum(axis=1) > 0
             corr_list.append((pts2d[valid], pts3d[valid]))
+            # 查询侧 3D（MASt3R 成对重建，查询相机系）：有则做深度一致性
+            # 内点判定（深度+重投影双条件），把 5px 阈值内的错误对应按
+            # 3D 深度结构剔除，收紧 tz/rot 条件数（solver.depth_consistency）
+            p3q = getattr(m, "pts3d_q", None)
+            p3q_ok = (p3q is not None and len(p3q) == len(pts3d)
+                      and bool(s_cfg.get("depth_consistency", False)))
             r = ransac_pnp(
                 pts2d[valid], pts3d[valid], K_query,
                 reproj_px=float(s_cfg.get("ransac_reproj_px", 5.0)),
@@ -709,7 +721,9 @@ class PoseEstimator:
                 refine_lm=bool(s_cfg.get("refine_lm", True)),
                 min_correspondences=int(s_cfg.get("min_correspondences", 6)),
                 flag=str(s_cfg.get("pnp_flag", "epnp")),
-                sym_transforms=self._sym_T or None)
+                sym_transforms=self._sym_T or None,
+                pts3d_q=p3q[valid] if p3q_ok else None,
+                depth_tau_frac=float(s_cfg.get("depth_tau_frac", 0.05)))
             r.template_idx = m.template_idx
             r.template_score = m.score
             results.append(r)
@@ -1163,14 +1177,20 @@ def _pack_matches(matches):
         pix_q = np.concatenate([m.pix_q for m in matches]).astype(np.uint16)
         pix_t = np.concatenate([m.pix_t for m in matches]).astype(np.uint16)
         sims = np.concatenate([m.sims for m in matches]).astype(np.float16)
+        p3q = [m.pts3d_q for m in matches]
+        pts3d_q = (np.concatenate(p3q, axis=0).astype(np.float32)
+                   if all(x is not None for x in p3q) and p3q
+                   else np.zeros((0, 3), np.float32))
     else:
         pix_q = np.zeros((0, 2), np.uint16)
         pix_t = np.zeros((0, 2), np.uint16)
         sims = np.zeros((0,), np.float16)
+        pts3d_q = np.zeros((0, 3), np.float32)
     seg = np.concatenate([[0], np.cumsum(n_per)]).astype(np.int32)
     return (pix_q, pix_t, sims, seg,
             np.asarray([m.template_idx for m in matches], dtype=np.int16),
-            np.asarray([m.score for m in matches], dtype=np.float32))
+            np.asarray([m.score for m in matches], dtype=np.float32),
+            pts3d_q)
 
 
 def save_extracted_matches(npz_path, ex: Dict):
@@ -1182,11 +1202,12 @@ def save_extracted_matches(npz_path, ex: Dict):
     """
     npz_path = Path(npz_path)
     npz_path.parent.mkdir(parents=True, exist_ok=True)
-    pix_q, pix_t, sims, seg, tpl_idx, score = _pack_matches(ex["matches"])
+    pix_q, pix_t, sims, seg, tpl_idx, score, pts3d_q = _pack_matches(
+        ex["matches"])
     np.savez_compressed(
         npz_path,
         pix_q=pix_q, pix_t=pix_t, sims=sims, seg=seg,
-        template_idx=tpl_idx, score=score,
+        template_idx=tpl_idx, score=score, pts3d_q=pts3d_q,
         crop=ex["crop"].astype(np.uint8),
         mask_crop=ex["mask_crop"].astype(np.uint8),
         crop_box=np.asarray(ex["crop_box_used"], dtype=np.int32),
@@ -1197,11 +1218,12 @@ def save_extracted_matches(npz_path, ex: Dict):
     )
     for i, a in enumerate(ex.get("alts") or ()):
         ap = npz_path.with_name(f"{npz_path.stem}_alt{i}.npz")
-        aq, at, asims, aseg, atpl, ascore = _pack_matches(a["matches"])
+        aq, at, asims, aseg, atpl, ascore, apts3d_q = _pack_matches(
+            a["matches"])
         np.savez_compressed(
             ap,
             pix_q=aq, pix_t=at, sims=asims, seg=aseg,
-            template_idx=atpl, score=ascore,
+            template_idx=atpl, score=ascore, pts3d_q=apts3d_q,
             crop=a["crop"].astype(np.uint8),
             mask_crop=a["mask_crop"].astype(np.uint8),
             crop_box=np.asarray(a["crop_box_used"], dtype=np.int32),
@@ -1214,14 +1236,18 @@ def _unpack_matches(d) -> List:
     """npz/数组 → TemplateMatch 列表（与 _pack_matches 互逆）。"""
     from .matching.mast3r_wrapper import TemplateMatch
     seg = d["seg"]
+    has_p3q = "pts3d_q" in d and d["pts3d_q"].shape[0] > 0
     matches = []
     for i, ti in enumerate(d["template_idx"]):
         s0, s1 = int(seg[i]), int(seg[i + 1])
+        p3q = (d["pts3d_q"][s0:s1].astype(np.float64)
+               if has_p3q else None)
         matches.append(TemplateMatch(
             template_idx=int(ti), score=float(d["score"][i]),
             pix_q=d["pix_q"][s0:s1].astype(np.float64),
             pix_t=d["pix_t"][s0:s1].astype(np.float64),
-            sims=d["sims"][s0:s1].astype(np.float32)))
+            sims=d["sims"][s0:s1].astype(np.float32),
+            pts3d_q=p3q))
     return matches
 
 
@@ -1312,19 +1338,41 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
 
     per_frame, all_timings = [], []
     cand_adds_all, cand_projs_all = [], []   # topK best 用的逐候选误差
-    # 帧级缓存（断点续跑）：cache[frame_id] = 该帧完整结果
+    # 帧级缓存（断点续跑）：cache[frame_id] = 该帧完整结果。
+    # 缓存带内容指纹（matches_dir + 配置哈希）：任何输入变化（换 matches、
+    # 换 bank、换 PnP 参数）都会让旧缓存整体作废——只按 frame_id 复用会
+    # 静默把旧配置的结果冒充新结果（ape 缓存事故，RESEARCH_LOG §10）。
+    # 追加模式（分片并行共享同一缓存文件时截断会互相踩踏）；陈旧内容
+    # 永远无法通过 meta 校验，load 时整体忽略。
     import json as _json
+    import hashlib
     cache = {}
     cache_fh = None
     if cache_path is not None:
         cp = Path(cache_path)
         cp.parent.mkdir(parents=True, exist_ok=True)
-        if cp.exists():
-            for line in cp.read_text().splitlines():
-                if line.strip():
-                    rec = _json.loads(line)
-                    cache[int(rec["frame_id"])] = rec
+        meta = {"matches_dir": matches_dir,
+                "cfg_hash": hashlib.sha1(_json.dumps(
+                    cfg, sort_keys=True, default=str).encode()).hexdigest()}
+        if cp.exists() and cp.stat().st_size > 0:
+            first = cp.read_text().splitlines()[:1]
+            if first:
+                try:
+                    head = _json.loads(first[0])
+                    if head.get("__meta__") == meta:
+                        for line in cp.read_text().splitlines()[1:]:
+                            if line.strip():
+                                try:
+                                    rec = _json.loads(line)
+                                    cache[int(rec["frame_id"])] = rec
+                                except (KeyError, ValueError, TypeError):
+                                    pass
+                except (ValueError, TypeError):
+                    pass
         cache_fh = open(cp, "a")
+        if cp.stat().st_size == 0:
+            cache_fh.write(_json.dumps({"__meta__": meta}) + "\n")
+            cache_fh.flush()
     # VGGT 路线的 3 张参考帧亦须扣除评测（P1-1 复审）：无 split 时 vggt
     # 参考帧从测试序列抽出，若不排除，几何初始化用过的帧就会进评测集。
     extra_exclude = None
