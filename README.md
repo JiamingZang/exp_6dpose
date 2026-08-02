@@ -50,12 +50,18 @@ exp_6dpose/
 │   ├── metrics/               # ADD/ADD-S/Proj@5pix/5cm5°(3.1.2)、旧格式对接(§8)
 │   └── pipeline.py            # onboard_object + PoseEstimator + evaluate_object
 ├── scripts/
-│   ├── onboard_object.py      # 离线：点云→尺度对齐→3DGS→40模板
-│   ├── run_linemod.py         # 主实验：13 物体全量评测（论文 3.2 表1）
-│   ├── run_ablation.py        # 消融：--ablation <yaml> 或 --all
+│   ├── onboard_object.py      # 离线：3DGS 深度监督训练 + 80 模板库
+│   ├── extract_matches.py     # 阶段 2：定位 + MASt3R 稠密对应落盘
+│   ├── run_linemod.py         # 阶段 3：PnP 求解 + 评测（13 物体）
+│   ├── rebuild_bank_fixed_views.py  # 固定模板视图重建（逆深度锚点）
+│   ├── patch_depth_anchor_maps.py   # 逆深度锚点渲染
 │   ├── run_speed.py           # 分阶段计时（论文 3.4）
-│   ├── import_prior_metrics.py # 旧代码真实结果 → 新库报告格式（§8）
+│   ├── summarize13.py         # 13 物体汇总表
+│   ├── rerun13_bg0.sh         # 全物体黑背景重训链（实验记录用）
+│   ├── run_ablation.py        # 消融：--ablation <yaml> 或 --all
 │   └── download_data.sh       # LineMod (BOP: lm_base+lm_models+lm_test_all)
+├── configs/experiments/       # 一次性实验配置归档（topk/背景/gtmask 变体）
+├── scripts/experiments/       # 一次性实验脚本归档（链脚本/诊断脚本）
 ├── setup_gpu.sh               # GPU 机器一键部署（依赖+MASt3R克隆+权重下载）
 ├── requirements.txt           # GPU 完整依赖
 ├── requirements-local.txt     # 本地 CPU 测试依赖
