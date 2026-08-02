@@ -421,8 +421,9 @@ class PoseEstimator:
             self._loc_mode = "yolo"
         elif seg in ("sam", "fastsam"):
             from .detection.localize import SamDinoLocalizer
-            self.localizer = SamDinoLocalizer(cfg["detection"], device=device,
-                                              segmenter=seg)
+            self.localizer = SamDinoLocalizer(
+                cfg["detection"], device=device, segmenter=seg,
+                bg_color=float(cfg["onboard"].get("bg_color", 1.0)))
             self._loc_mode = "dino"
         else:
             # 显式报错，绝不静默换模型（历史上 fastsam 会悄悄落回 SAM）

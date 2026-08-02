@@ -255,7 +255,8 @@ class SamDinoLocalizer:
 
     def __init__(self, cfg_det: Dict, device: str = "cuda",
                  embedder: Optional[Dinov2Embedder] = None,
-                 segmenter: str = "sam"):
+                 segmenter: str = "sam",
+                 bg_color: float = 1.0):
         try:
             import torch
         except ImportError as e:
@@ -264,6 +265,10 @@ class SamDinoLocalizer:
         self.device = device
         self.cfg = cfg_det
         self.segmenter_name = segmenter
+        # 候选裁剪的背景填充色须与模板渲染背景（onboard.bg_color）一致，
+        # 否则 CLS 检索的"背景构图"分量与模板不同源（模板黑背景时涂白会
+        # 系统性压低分数）。
+        self._bg = int(round(bg_color * 255))
 
         if segmenter == "fastsam":
             # 主实验分割器：FastSAM（ultralytics）。掩码生成器统一暴露
@@ -317,25 +322,34 @@ class SamDinoLocalizer:
             return None
 
         n_cand = int(self.cfg.get("loc_n_candidates", 3))
-        scored = []               # (score, seg, bbox, feat)
+        # 批量 CLS 前向：全部候选一次前向（~100 候选逐前向是每帧 2.5s 的
+        # 大头；拼 batch 输入仅 ~15MB，降到 ~0.3s）。
+        crops, metas = [], []
         for m in masks:
             seg = m["segmentation"]
             x, y, bw, bh = m["bbox"]
             if bw < 8 or bh < 8:
                 continue  # 过小碎片跳过：DINOv2 上采样后全是插值噪声
             crop = img_rgb_u8[int(y):int(y + bh), int(x):int(x + bw)]
-            # 掩码外背景涂白：模板渲染同为白底（onboard.bg_color=1.0），
-            # 背景纹理会把 CLS token 拉向"构图相似"的假匹配（实测背景碎片
-            # 反超 ape 本体）；涂白后检索分数与排名显著改善
+            # 掩码外背景填模板同色背景（onboard.bg_color）：背景纹理会把
+            # CLS token 拉向"构图相似"的假匹配（实测背景碎片反超本体）；
+            # 填色必须与模板渲染背景一致，否则跨域检索分数系统性偏低
             seg_crop = seg[int(y):int(y + bh), int(x):int(x + bw)]
             crop = crop.copy()
-            crop[~seg_crop] = 255
-            f = self._cls_feature(crop)
+            crop[~seg_crop] = self._bg
+            crops.append(crop)
+            metas.append((seg, (x, y, bw, bh)))
+        if not crops:
+            return None
+        feats = self.embedder.cls_features(crops)
+        scored = []
+        for (seg, bbox), f in zip(metas, feats):
+            x, y, bw, bh = bbox
             if self.f_white is not None:
                 score = centered_cosine_score(f, template_feats, self.f_white)
             else:
                 score = cosine_max_score(f, template_feats)
-            scored.append((score, seg, (x, y, bw, bh), f))
+            scored.append((score, seg, bbox, f))
         if not scored:
             return None
         scored.sort(key=lambda s: -s[0])
