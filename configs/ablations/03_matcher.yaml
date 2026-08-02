@@ -1,0 +1,8 @@
+# 消融：匹配模型对比
+# mast3r        —— 本文默认，稠密局部描述子（d=24）
+# dinov2_patch  —— 用 DINOv2 patch token 当稠密描述子（14×14 patch，双线性上采样到像素）
+# loftr         —— 预留接口，src/matching/loftr_matcher.py 里是 TODO（未实现会显式报错）
+ablation:
+  name: matcher
+  sweep_field: matching.matcher
+  sweep_values: [mast3r, dinov2_patch, loftr]

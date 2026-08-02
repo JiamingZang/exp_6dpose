@@ -1,0 +1,8 @@
+# 消融：Top-K 的 K 值影响
+# 脚本内循环 k_values，每个 K 跑一遍全量评测；模板库复用（离线阶段与 K 无关）。
+# template_ranking=dinov2（默认）时，K<40 会真正减少 MASt3R 解码与 PnP 次数，
+# 刻画精度-延迟权衡曲线。
+ablation:
+  name: topk
+  sweep_field: matching.top_k
+  sweep_values: [1, 5, 10, 20, 40]

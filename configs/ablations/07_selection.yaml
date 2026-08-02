@@ -1,0 +1,8 @@
+# 消融：多候选择优判据
+# inlier      —— 内点数最多者胜（本文方法）
+# similarity  —— 直接取 DINOv2 相似度最高的模板结果（不做几何验证择优）
+# weighted    —— 内点数 × 模板相似度 的加权分数
+ablation:
+  name: selection
+  sweep_field: solver.selection
+  sweep_values: [inlier, similarity, weighted]

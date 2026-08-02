@@ -1,0 +1,9 @@
+# 消融：模板渲染器对比
+# 3dgs         —— 3DGS 光栅化渲染（本文方法，照片级真实感）
+# pyrender_cad —— 直接用 CAD 网格 OpenGL 光栅化渲染模板（无外观学习，仅几何着色）
+# 渲染器决定模板图像，必须重新 onboard
+ablation:
+  name: renderer
+  sweep_field: renderer.backend
+  sweep_values: [3dgs, pyrender_cad]
+  requires_reonboard: true

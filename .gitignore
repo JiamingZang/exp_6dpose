@@ -1,0 +1,18 @@
+# 数据与模型权重（大文件不入库）
+data/
+weights/
+outputs/
+results/
+debug_out/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# 环境与工具
+env.sh
+.venv/
+*.log
+third_party/mast3r/

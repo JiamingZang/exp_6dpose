@@ -1,0 +1,10 @@
+# 消融：分割模型对比
+# fastsam  —— FastSAM（ultralytics，主实验，约 30ms）
+# sam      —— SAM ViT-H 自动掩码（约 200ms，消融对照）
+# gt_mask  —— 直接用 loader 的 GT 可见掩码定位，代表"分割完美"的性能上界
+#            （pipeline 走 GtMaskLocalizer，bbox 由掩码外接框推出）
+# 分割模型只在线定位阶段生效，模板库复用，无需重新 onboard。
+ablation:
+  name: segmenter
+  sweep_field: detection.segmenter
+  sweep_values: [fastsam, sam, gt_mask]

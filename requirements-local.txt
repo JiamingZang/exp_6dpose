@@ -1,0 +1,9 @@
+# 本地（macOS arm64，无 CUDA）CPU 测试依赖：只跑 tests/ 单测
+# python3 -m venv .venv && .venv/bin/pip install -r requirements-local.txt
+numpy<2
+scipy
+opencv-python-headless
+pyyaml
+pillow
+pytest
+torch                     # CPU 版即可（gaussian/ssim 等模块导入需要）

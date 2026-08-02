@@ -1,0 +1,4 @@
+base: dense80.yaml
+
+matching:
+  batch_size: 2

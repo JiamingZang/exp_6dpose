@@ -1,0 +1,5 @@
+base: dense80.yaml
+matching:
+  batch_size: 6
+  top_k: 40
+  fusion: false

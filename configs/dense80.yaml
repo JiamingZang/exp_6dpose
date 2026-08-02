@@ -1,0 +1,16 @@
+base: default.yaml
+templates:
+  viewpoint_mode: fibonacci
+  n_viewpoints: 16
+  n_inplane: 5
+matching:
+  top_k: 40                   # 只解码 CLS 最近 40 个模板（已验证 ≈ 全 80 解码
+                              # 36.2/60.8 vs 36.2/61.5，extract 时间减半）
+  fusion: false              # 融合匹配已证伪（硬分配破坏联合 PnP 多样性）
+solver:
+  ransac_top_templates: 12
+  render_select: true
+  refine_early_stop_patience: 0
+  multi_hypo: false
+  multi_hypo_seeds: 6
+  multi_hypo_iou: 0.3

@@ -1,0 +1,16 @@
+# 消融：模板数量影响
+# 8   = 8 顶点 × 1 旋转（无平面内旋转增强）
+# 24  = 8 顶点 × 3 旋转
+# 40  = 8 顶点 × 5 旋转（默认配置）
+# 80  = 16 视角 × 5 旋转（视角加密，需切 fibonacci 采样）
+# 注意：本组会改变离线模板库，必须为每个取值重新 onboard_object.py
+ablation:
+  name: n_templates
+  sweep_field: templates.__preset__
+  sweep_values: [8, 24, 40, 80]
+  presets:
+    8:  {viewpoint_mode: cube8, n_viewpoints: 8, n_inplane: 1}
+    24: {viewpoint_mode: cube8, n_viewpoints: 8, n_inplane: 3}
+    40: {viewpoint_mode: cube8, n_viewpoints: 8, n_inplane: 5}
+    80: {viewpoint_mode: fibonacci, n_viewpoints: 16, n_inplane: 5}
+  requires_reonboard: true

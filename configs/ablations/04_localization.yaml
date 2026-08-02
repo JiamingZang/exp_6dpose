@@ -1,0 +1,7 @@
+# 消融：定位方式对比
+# fastsam  —— FastSAM 自动掩码 + DINOv2 CLS 相似度定位（本文默认，主实验）
+# gt_bbox  —— 直接用 GT bbox 裁剪，代表定位阶段的性能上界
+ablation:
+  name: localization
+  sweep_field: detection.segmenter
+  sweep_values: [fastsam, gt_bbox]

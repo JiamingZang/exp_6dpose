@@ -1,0 +1,8 @@
+# 消融：RANSAC-EPnP 内点重投影阈值 ε 敏感性
+# ε 太小 → 正确对应被误判外点，内点数不足，位姿不稳；
+# ε 太大 → 外点混入内点集，位姿被拉偏。默认 5px。
+# 阈值只在线求解阶段生效，与离线模板库无关，无需重新 onboard。
+ablation:
+  name: ransac_eps
+  sweep_field: solver.ransac_reproj_px
+  sweep_values: [3, 5, 8, 10]

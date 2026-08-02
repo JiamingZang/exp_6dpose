@@ -1,0 +1,6 @@
+base: dense80.yaml
+runtime:
+  template_dir: outputs/templates_scaled
+solver:
+  refine_pose: false
+  render_select: false

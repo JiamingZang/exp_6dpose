@@ -1,0 +1,18 @@
+# 消融：尺度对齐（仅 VGGT 几何路线有意义）
+#
+# 重要：在本文纯 RGB-PnP 评测协议下，对点云施加全局缩放 s 会被 PnP 解出的
+# 平移分量 s·t 精确抵消（透视投影对"点云缩放 + 平移等比缩放"不变），因此
+# 尺度对齐对 ADD/旋转等归一化指标是一个**数学恒等变换**，测不出差异
+# （见 src/geometry/scale_align.py）。故不单列"有/无尺度对齐"的指标消融。
+#
+# 本组仅作为 VGGT 路线的度量尺度诚实性检查保留：VGGT 重建尺度是相对的，
+# 焦距比缩放只补偿成像尺度差，真实度量尺度靠评测时的 Umeyama 对齐
+# 。运行前请把 geometry.source 设为 vggt（如用 --config 指向
+# vggt 配置），否则本组在 CAD+RGB-PnP 下无差异。
+#
+# 尺度只改点云绝对尺寸、不改 ADD 比值，故无需全量重训（去掉 requires_reonboard）。
+ablation:
+  name: scale_align
+  sweep_field: scale_align.enabled
+  sweep_values: [true, false]
+  requires_reonboard: false

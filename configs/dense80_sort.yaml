@@ -1,0 +1,10 @@
+# 分解实验：dense80 + 排序修复（不设 RANSAC 上限）
+base: default.yaml
+
+templates:
+  viewpoint_mode: fibonacci
+  n_viewpoints: 16
+  n_inplane: 5
+
+matching:
+  top_k: 80

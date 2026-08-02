@@ -1,0 +1,10 @@
+# 消融：几何初始化方式对比
+# cad   —— CAD 网格表面均匀采样（主路线）
+# vggt  —— VGGT 前馈重建（补充路线）。VGGT 推理在 src/datasets/vggt_recon.py，
+#          需要 GPU 机器上装 vggt 包；未装时 loader 抛 ImportError 并给出安装提示。
+# 本组同样改变离线几何，必须重新 onboard
+ablation:
+  name: geometry
+  sweep_field: geometry.source
+  sweep_values: [cad, vggt]
+  requires_reonboard: true

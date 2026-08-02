@@ -1,0 +1,27 @@
+# GPU 机器完整依赖（Linux + CUDA）。torch 版本按机器 CUDA 驱动自行匹配，
+# 例如 CUDA 12.6: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+torch>=2.7                # gsplat 1.5.3 要求 torch>=2.7（third_party/gsplat/setup.py:141）
+torchvision
+numpy<2                   # mast3r/dust3r 时代代码未适配 numpy 2.x
+scipy                     # 本库 KDTree + mast3r/fast_nn（dust3r/requirements.txt）
+opencv-python             # dust3r/requirements.txt
+pyyaml
+pillow
+tqdm
+einops                    # dust3r/requirements.txt
+roma                      # dust3r/requirements.txt（旋转工具）
+huggingface_hub           # dust3r/requirements.txt：huggingface-hub[torch]>=0.22
+safetensors
+# ---- 3DGS ----
+gsplat==1.5.3             # 与 third_party/gsplat 克隆版本一致（gsplat/version.py:16）；
+                          # 需要 CUDA toolkit（nvcc），首次 import 时 JIT 编译
+# ---- 分割/检测 ----
+segment-anything          # SAM ViT-H，setup.py 无强制依赖（权重另行下载，见 setup_gpu.sh）
+ultralytics               # FastSAM（论文 3.4.1 主实验分割器）；权重 FastSAM-x.pt 首次运行自动下载。可选依赖，未装时 segmenter=fastsam 会给明确安装提示
+# ---- 消融可选 ----
+pyrender                  # 消融 3.3.8 pyrender_cad 渲染器（需 EGL）
+trimesh
+# scikit-learn            # 仅 mast3r 训练侧（mast3r/losses.py）需要，推理链路不用
+# vggt                    # 消融 3.3.5 VGGT 路线：pip install vggt 或源码安装
+# kornia                  # 消融 3.3.3 LoFTR（TODO 接口，实现后启用）
+# MASt3R 本体不装 pip 包：setup_gpu.sh 克隆源码并加入 PYTHONPATH

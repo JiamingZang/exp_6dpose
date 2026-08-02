@@ -1,0 +1,5 @@
+# 密档并行 extract：dense80 全部配置 + batch 8 控制单进程显存（~6GB）
+base: dense80.yaml
+
+matching:
+  batch_size: 8
