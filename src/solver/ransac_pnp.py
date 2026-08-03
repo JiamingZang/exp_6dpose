@@ -57,11 +57,17 @@ def ransac_pnp(pts2d: np.ndarray, pts3d: np.ndarray, K: np.ndarray,
                flag: str = "epnp",
                sym_transforms: Optional[List[np.ndarray]] = None,
                pts3d_q: Optional[np.ndarray] = None,
-               depth_tau_frac: float = 0.0) -> PnPResult:
+               depth_tau_frac: float = 0.0,
+               pix_t: Optional[np.ndarray] = None,
+               pix_q_match: Optional[np.ndarray] = None,
+               pix_scale: Optional[tuple] = None,
+               q_img: Optional[np.ndarray] = None,
+               t_img: Optional[np.ndarray] = None,
+               subpixel_px: float = 0.0) -> PnPResult:
     """RANSAC-EPnP + LM 精化。
 
     Args:
-        pts2d: (N,2) 查询像素坐标 y_j
+        pts2d: (N,2) 查询像素坐标 y_j（原图系）
         pts3d: (N,3) 三维锚点 P_j（物体/模型系）
         K:     (3,3) 查询相机内参
         reproj_px: 内点阈值 ε
@@ -74,7 +80,34 @@ def ransac_pnp(pts2d: np.ndarray, pts3d: np.ndarray, K: np.ndarray,
             {T_sym @ p} ∪ {p} 共 K+1 个等价点（共享同一 2D 像素），
             使错配到对称等价位置的对应点可进入 RANSAC 内点集——
             ADD-S 评估允许对称等价位姿，内点判定必须同样允许。
+        pix_t: (N,2) 模板像素坐标（匹配系，与 pts2d 同序），NCC 用
+        pix_q_match: (N,2) 查询像素（匹配系，与 pts2d 同序），NCC 用
+        pix_scale: (sx, sy) 匹配系 → 原图系缩放（x_orig = x0 + x/sx）
+        q_img / t_img: 查询裁剪图 / 模板图（同为匹配系尺度）
+        subpixel_px: >0 时对 RANSAC 内点做 NCC 亚像素精化后重跑 LM。
+            匹配误差 1-2px 是小物体 tz 病态的上游来源（投影歧义），
+            压到亚像素后 RANSAC 的模型可分性提升。通用机制，无假设。
     """
+    res = _ransac_pnp_core(
+        pts2d, pts3d, K, reproj_px, confidence, iterations, refine_lm,
+        min_correspondences, flag, sym_transforms, pts3d_q, depth_tau_frac)
+    if (res.success and subpixel_px > 0 and q_img is not None
+            and t_img is not None and pix_t is not None
+            and pix_q_match is not None and pix_scale is not None):
+        res = _refine_subpixel(res, pts2d, pts3d, pix_t, pix_q_match,
+                               pix_scale, K, q_img, t_img, subpixel_px)
+    return res
+
+
+def _ransac_pnp_core(pts2d: np.ndarray, pts3d: np.ndarray, K: np.ndarray,
+                     reproj_px: float = 5.0, confidence: float = 0.999,
+                     iterations: int = 1000, refine_lm: bool = True,
+                     min_correspondences: int = 6,
+                     flag: str = "epnp",
+                     sym_transforms: Optional[List[np.ndarray]] = None,
+                     pts3d_q: Optional[np.ndarray] = None,
+                     depth_tau_frac: float = 0.0) -> PnPResult:
+    """RANSAC-EPnP + LM 精化（核心，subpixel 精化由外层 ransac_pnp 包装）。"""
     solver_flag = _pnp_flag(flag)
     pts3d = np.ascontiguousarray(pts3d, dtype=np.float64).reshape(-1, 3)
     pts2d = np.ascontiguousarray(pts2d, dtype=np.float64).reshape(-1, 2)
@@ -285,3 +318,115 @@ def _ransac_pnp_depth(pts2d, pts3d, pts3d_q, K, reproj_px, confidence,
                      n_inliers=len(inl), inlier_idx=inl,
                      n_correspondences=n,
                      mean_inlier_reproj_px=float(e[inl].mean()))
+
+
+# ---------------------------------------------------------------------------
+# NCC 亚像素精化（subpixel_px）
+# ---------------------------------------------------------------------------
+def _ncc_subpixel_refine(pix_q: np.ndarray, pix_t: np.ndarray,
+                         img_q: np.ndarray, img_t: np.ndarray,
+                         radius: int = 5, win: int = 2) -> np.ndarray:
+    """对每对对应点做 NCC 亚像素精化，返回精化后的查询像素 (N,2)。
+
+    以查询点为中心取 (2w+1)² patch，在模板点 ±radius 搜索窗内逐位置算
+    NCC，取峰值 + 抛物线亚像素插值。仅精化查询点（2D 观测噪声大），
+    锚点（3D）不动。边界/低纹理点返回原值。
+    """
+    gq = img_q if img_q.ndim == 2 else img_q.mean(-1)
+    gt = img_t if img_t.ndim == 2 else img_t.mean(-1)
+    gq = np.asarray(gq, dtype=np.float32)
+    gt = np.asarray(gt, dtype=np.float32)
+    Hq, Wq = gq.shape
+    Ht, Wt = gt.shape
+    px = np.round(pix_q[:, 0]).astype(np.int64)
+    py = np.round(pix_q[:, 1]).astype(np.int64)
+    tx = np.round(pix_t[:, 0]).astype(np.int64)
+    ty = np.round(pix_t[:, 1]).astype(np.int64)
+    w = win
+    n = len(px)
+    out = pix_q.copy()
+    ok = ((px - w >= 0) & (py - w >= 0) & (px + w < Wq) & (py + w < Hq)
+          & (tx - radius >= 0) & (ty - radius >= 0)
+          & (tx + radius < Wt) & (ty + radius < Ht))
+    if ok.sum() < 16:
+        return out
+    i = np.nonzero(ok)[0]
+    yy = py[i, None] + np.arange(-w, w + 1)
+    xx = px[i, None] + np.arange(-w, w + 1)
+    qp = gq[yy[:, :, None], xx[:, None, :]].astype(np.float64)   # (M,5,5)
+    tyy = ty[i, None] + np.arange(-radius, radius + 1)
+    txx = tx[i, None] + np.arange(-radius, radius + 1)
+    tp = gt[tyy[:, :, None], txx[:, None, :]].astype(np.float64)  # (M,11,11)
+    # 滑动窗口展开 (M, (11-5+1)²=49, 25)
+    from numpy.lib.stride_tricks import sliding_window_view
+    tpw = sliding_window_view(tp, (w * 2 + 1, w * 2 + 1),
+                              axis=(1, 2)).reshape(len(i), -1, 25)
+    qpf = qp.reshape(len(i), 25)
+    qm = qpf - qpf.mean(1, keepdims=True)
+    tm = tpw - tpw.mean(2, keepdims=True)
+    qn = np.linalg.norm(qm, axis=1, keepdims=True) + 1e-6
+    tn = np.linalg.norm(tm, axis=2, keepdims=True) + 1e-6
+    ncc = (qm[:, None, :] * tm).sum(2) / (qn * tn[:, :, 0])       # (M,49)
+    best = ncc.argmax(1)
+    npos = 2 * (radius - w) + 1          # 滑动位置数（11-5+1=7）
+    bx = (best % npos) - (radius - w)
+    by = (best // npos) - (radius - w)
+    # 抛物线亚像素（沿峰值 x/y 方向）
+    sub = np.zeros((len(i), 2), dtype=np.float64)
+    for d in range(2):
+        if d == 0:
+            prev = np.clip(best - 1, 0, npos * npos - 1)
+            nxt = np.clip(best + 1, 0, npos * npos - 1)
+        else:
+            prev = np.clip(best - npos, 0, npos * npos - 1)
+            nxt = np.clip(best + npos, 0, npos * npos - 1)
+        c1 = ncc[np.arange(len(i)), prev]
+        c2 = ncc[np.arange(len(i)), best]
+        c3 = ncc[np.arange(len(i)), nxt]
+        denom = c1 - 2 * c2 + c3
+        dlt = np.where(np.abs(denom) > 1e-9, 0.5 * (c1 - c3) / denom, 0.0)
+        sub[:, d] = dlt
+    off_x = bx + sub[:, 0]
+    off_y = by + sub[:, 1]
+    out[i, 0] = pix_q[i, 0] + off_x
+    out[i, 1] = pix_q[i, 1] + off_y
+    return out
+
+
+def _refine_subpixel(res: PnPResult, pts2d: np.ndarray, pts3d: np.ndarray,
+                     pix_t: np.ndarray, pix_q_match: np.ndarray,
+                     pix_scale: tuple, K: np.ndarray,
+                     q_img: np.ndarray, t_img: np.ndarray,
+                     subpixel_px: float) -> PnPResult:
+    """内点 NCC 亚像素精化（匹配系）+ LM 重解（原图系）。"""
+    idx = res.inlier_idx
+    if len(idx) < 6:
+        return res
+    p2 = pts2d[idx]
+    p3 = pts3d[idx]
+    pt = pix_t[idx]
+    pqm = pix_q_match[idx]
+    p2m_new = _ncc_subpixel_refine(pqm, pt, q_img, t_img)
+    moved = np.linalg.norm(p2m_new - pqm, axis=1)
+    keep = moved > float(subpixel_px)
+    if keep.sum() < 4:
+        return res
+    # 匹配系偏移 → 原图系
+    off = p2m_new - pqm
+    off[:, 0] /= float(pix_scale[0])
+    off[:, 1] /= float(pix_scale[1])
+    p2_new = p2 + off
+    rvec, _ = cv2.Rodrigues(res.R)
+    tvec = res.t.reshape(3, 1)
+    try:
+        rvec, tvec = cv2.solvePnPRefineLM(
+            p3, p2_new.reshape(-1, 1, 2), K, None, rvec, tvec)
+    except cv2.error:
+        return res
+    R, _ = cv2.Rodrigues(rvec)
+    uv, _ = cv2.projectPoints(p3, rvec, tvec, K, None)
+    residual = np.linalg.norm(uv.reshape(-1, 2) - p2_new, axis=1)
+    return PnPResult(success=True, R=R, t=tvec.reshape(3),
+                     n_inliers=len(idx), inlier_idx=idx,
+                     n_correspondences=res.n_correspondences,
+                     mean_inlier_reproj_px=float(residual.mean()))

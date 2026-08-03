@@ -1,0 +1,4 @@
+base: dense80_depthc_guided.yaml
+
+solver:
+  ransac_reproj_px: 1.0

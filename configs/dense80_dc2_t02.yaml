@@ -1,0 +1,4 @@
+base: dense80_depthc_guided.yaml
+
+solver:
+  depth_tau_frac: 0.02

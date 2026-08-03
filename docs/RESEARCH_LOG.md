@@ -227,3 +227,20 @@ driller 95.0 / cam 55.8。
 MEAN ADD 67.44 / Proj 81.54 / 5cm5° 66.54（ape 30.8 为真值；
 cat 53.3 / phone 62.5 / duck 33.3 / can 90.0 较旧表提升；
 holepuncher 24.2 最弱）。
+
+## §12. D 类修复：查询侧深度一致性 PnP（08-03 凌晨）
+
+- 实现：matches 落盘新增 pts3d_q（MASt3R 成对重建查询侧 3D，米制）；
+  _ransac_pnp_depth 内点 = 重投影<ε 且 |z_anchor - c·z_q| < τ·c·z_q
+  （c 为逐候选自校准尺度，吸收米/毫米单位差与成对尺度误差）。
+- 第一轮 duck 验证（120 帧，tau=5%）：
+  | 配置 | ADD | Proj | cm_deg |
+  |---|---|---|---|
+  | 基线 no-refine | 26.7 | 75.8 | 38.3 |
+  | 深度一致性 no-refine | **31.7** | 71.7 | 37.5 |
+  | 基线 +refine | 31.7 | 81.7 | 44.2 |
+  | 深度一致性 +refine | 待出 | | |
+- 解读：深度一致性单独 ≈ refine 效果（+5.0 ADD），Proj 略降（5px
+  内错误对应被剔除的副作用，tau 敏感性待测：8%/10%）。
+- Bug 修复：pts3d_q 落盘曾因 `p3q = p3q[0]` 取行导致 (120,) 错位
+  （extract12_v4 的 matches 全受影响，需重提取才能用深度一致性）。

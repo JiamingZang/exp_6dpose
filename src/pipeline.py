@@ -683,7 +683,9 @@ class PoseEstimator:
 
         # ---- 步骤 8：逐模板 RANSAC-PnP ----
         results: List[PnPResult] = []
-        corr_list = []   # 逐模板 (pts2d, pts3d)，联合 PnP 精化复用
+        # 逐模板 (pts2d, pts3d, pix_t_valid, pix_q_match_valid, tpl_img)，
+        # 联合 PnP 精化与 NCC 亚像素分组复用
+        corr_list = []
         for m in matches:
             # 查询像素反变换：MASt3R 匹配区 → 裁剪区 → 原图坐标。
             # tight_square 时总缩放 = 匹配 resize × 方形裁剪 resize 的复合
@@ -706,7 +708,10 @@ class PoseEstimator:
                 pts3d = cm[yt, xt]
                 # 坐标图无效像素（背景/alpha 过低置 0）剔除
                 valid = np.abs(pts3d).sum(axis=1) > 0
-            corr_list.append((pts2d[valid], pts3d[valid]))
+            corr_list.append((pts2d[valid], pts3d[valid],
+                              m.pix_t[valid], m.pix_q[valid],
+                              self.bank.images[m.template_idx]
+                              if self.bank.images is not None else None))
             # 查询侧 3D（MASt3R 成对重建，查询相机系）：有则做深度一致性
             # 内点判定（深度+重投影双条件），把 5px 阈值内的错误对应按
             # 3D 深度结构剔除，收紧 tz/rot 条件数（solver.depth_consistency）
@@ -723,7 +728,14 @@ class PoseEstimator:
                 flag=str(s_cfg.get("pnp_flag", "epnp")),
                 sym_transforms=self._sym_T or None,
                 pts3d_q=p3q[valid] if p3q_ok else None,
-                depth_tau_frac=float(s_cfg.get("depth_tau_frac", 0.05)))
+                depth_tau_frac=float(s_cfg.get("depth_tau_frac", 0.05)),
+                pix_t=m.pix_t[valid],
+                pix_q_match=m.pix_q[valid],
+                pix_scale=(float(sx * s_leg_x), float(sy * s_leg_y)),
+                q_img=ex.get("crop"),
+                t_img=self.bank.images[m.template_idx]
+                if self.bank.images is not None else None,
+                subpixel_px=float(s_cfg.get("subpixel_px", 0.0)))
             r.template_idx = m.template_idx
             r.template_score = m.score
             results.append(r)
@@ -792,10 +804,70 @@ class PoseEstimator:
                         if tz < lo * tz_exp or tz > hi * tz_exp:
                             r_j.success = False
                 if r_j.success:
+                    # NCC 亚像素精化（联合路径，按模板分组）：内点按模板
+                    # 切分，各自用对应模板图做 NCC，偏移转原图系后全量 LM
+                    sp = float(s_cfg.get("subpixel_px", 0.0))
+                    q_img = ex.get("crop")
+                    if sp > 0 and q_img is not None:
+                        r_j = self._joint_subpixel_refine(
+                            r_j, corr_list[:joint_k], K_query, sp, q_img,
+                            (float(sx * s_leg_x), float(sy * s_leg_y)))
                     r_j.template_idx = best.template_idx
                     r_j.template_score = best.template_score
                     best = r_j
         return best, results
+
+    def _joint_subpixel_refine(self, r_j, corr_k, K_query, sp, q_img,
+                               pix_scale):
+        """联合 PnP 结果的 NCC 亚像素精化（按模板分组）。
+
+        内点按模板切分，各自用对应模板图做 NCC（匹配系），偏移按
+        pix_scale 转原图系后全量 LM 重解。
+        """
+        from .solver.ransac_pnp import PnPResult, _ncc_subpixel_refine
+        import cv2
+        idx = r_j.inlier_idx
+        if len(idx) < 6:
+            return r_j
+        all_p2 = np.empty((len(idx), 2))
+        all_p3 = np.empty((len(idx), 3))
+        off = np.zeros((len(idx), 2))
+        start = 0
+        for j2k, j3k, ptk, pqk, tpl_img in corr_k:
+            nk = len(j2k)
+            in_tpl = (idx >= start) & (idx < start + nk)
+            gpos = np.nonzero(in_tpl)[0]     # 内点序号（all_* 行索引）
+            start += nk
+            if len(gpos) == 0:
+                continue
+            lk = idx[in_tpl] - (start - nk)  # 模板内局部下标
+            all_p2[gpos] = j2k[lk]
+            all_p3[gpos] = j3k[lk]
+            if tpl_img is not None and len(lk) >= 4:
+                pqm_new = _ncc_subpixel_refine(pqk[lk], ptk[lk],
+                                               q_img, tpl_img)
+                off[gpos] = pqm_new - pqk[lk]
+        moved = np.linalg.norm(off, axis=1)
+        m = moved > sp
+        if m.sum() < 4:
+            return r_j
+        p2n = all_p2.copy()
+        p2n[m, 0] += off[m, 0] / pix_scale[0]
+        p2n[m, 1] += off[m, 1] / pix_scale[1]
+        rvec, _ = cv2.Rodrigues(r_j.R)
+        tvec = r_j.t.reshape(3, 1)
+        try:
+            rvec, tvec = cv2.solvePnPRefineLM(
+                all_p3, p2n.reshape(-1, 1, 2), K_query, None, rvec, tvec)
+        except cv2.error:
+            return r_j
+        R, _ = cv2.Rodrigues(rvec)
+        uv, _ = cv2.projectPoints(all_p3, rvec, tvec, K_query, None)
+        residual = np.linalg.norm(uv.reshape(-1, 2) - p2n, axis=1)
+        return PnPResult(success=True, R=R, t=tvec.reshape(3),
+                         n_inliers=len(idx), inlier_idx=idx,
+                         n_correspondences=r_j.n_correspondences,
+                         mean_inlier_reproj_px=float(residual.mean()))
 
     # ------------------------------------------------------------------
     def mask_ratio_init(self, ex: Dict, K_query: np.ndarray):
@@ -1121,6 +1193,62 @@ class PoseEstimator:
             if R_r is not None:
                 R_out, t_out = self._to_model_frame(R_r, t_r)
             timings["refine"] = time.time() - t0
+
+        # ---- tz 面积比校准（tz_search）：渲染掩码面积 ∝ 1/z²，用
+        # 查询掩码面积比迭代校正深度；随后按掩码质心差校正 xy ----
+        # 深度病态：小物体 tz 错 30-40mm 时重投影偏移 <5px（RANSAC 无法
+        # 分辨），但渲染掩码面积对 z 敏感。面积比 r=sqrt(A_render/A_mask)，
+        # z_new = z·r 使面积自洽（迭代 2 次收敛）；xy 按渲染掩码质心与
+        # 查询掩码质心的像素差反投影校正（GSPose §3.2 同款 Δxy 机制）。
+        # 3DGS 渲染掩码与 FastSAM 掩码面积存在物体相关系统偏差，直接
+        # 面积比会把已准帧拉偏——用校准前后渲染 IoU 做接受判据：IoU
+        # 提升才接受（GSPose 面积比给候选、IoU 验方向）。
+        if (bool(s_cfg.get("tz_search", False))
+                and self._verifier is not None):
+            t0 = time.time()
+            x0, y0, _, _ = chosen_ex["crop_box_used"]
+            K_crop = K_query.copy()
+            K_crop[0, 2] -= x0
+            K_crop[1, 2] -= y0
+            mask = chosen_ex["mask_crop"]
+            if mask is not None:
+                mask = np.asarray(mask) > 0
+                a_mask = float(mask.sum())
+                if a_mask >= 16:
+                    import torch
+                    W, H = mask.shape[1], mask.shape[0]
+                    Kt = torch.tensor(K_crop, dtype=torch.float32,
+                                      device=self.device)
+                    iou_before = self._verifier.mask_iou(
+                        R_out, t_out, K_crop, mask)
+                    t_cur = t_out.copy()
+                    for _ in range(2):
+                        R0t = torch.tensor(R_out, dtype=torch.float32,
+                                           device=self.device)
+                        t0t = torch.tensor(t_cur, dtype=torch.float32,
+                                           device=self.device)
+                        _, alpha = self._verifier._render(
+                            R0t, t0t, Kt, W, H)
+                        rend = (alpha[..., 0].detach().cpu().numpy() > 0.5)
+                        a_render = float(rend.sum())
+                        if a_render < 16:
+                            break
+                        r = np.sqrt(a_render / a_mask)
+                        if not (0.8 <= r <= 1.25):
+                            break
+                        t_cur[2] *= r
+                    # xy 质心对齐：渲染掩码质心 → 查询掩码质心
+                    ry, rx = np.nonzero(rend)
+                    my, mx = np.nonzero(mask)
+                    if len(ry) >= 16 and len(my) >= 16:
+                        dcx = (mx.mean() - rx.mean()) / K_crop[0, 0]
+                        dcy = (my.mean() - ry.mean()) / K_crop[1, 1]
+                        t_cur[0] += dcx * t_cur[2]
+                        t_cur[1] += dcy * t_cur[2]
+                    if (self._verifier.mask_iou(R_out, t_cur, K_crop, mask)
+                            > iou_before):
+                        t_out = t_cur
+            timings["tz_search"] = time.time() - t0
         return EstimateResult(success=True, R=R_out, t=t_out,
                               n_inliers=chosen.n_inliers,
                               best_template=chosen.template_idx,

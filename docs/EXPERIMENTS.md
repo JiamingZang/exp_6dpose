@@ -225,3 +225,31 @@ baseline 为 3 节主表，即 dense80_depth 系列）：
 | `docs/RESEARCH_LOG.md` | 研究时间线（含全部中间数字） |
 | `docs/session/*.jsonl.gz` | 会话原始日志（token 已脱敏） |
 | `outputs/templates/*.npz[.orig/.viewsbak]` | 各版本模板库备份 |
+
+### 轮 9：depth_consistency + guided_refine 全物体（08-03）
+
+`dense80_depthc_guided.yaml`（depth_consistency + depth_tau_frac 0.05 + guided_refine 2 轮）
++ `matches13_dc2`（修复 pts3d_q 采样后重提取，120 帧/物体）：
+
+| 物体 | 基线 ADD | dc2 ADD | Δ |
+|---|---|---|---|
+| ape | 30.83 | 37.5 | **+6.7** |
+| benchvise | 83.33 | 84.2 | +0.9 |
+| cam | 57.50 | 59.2 | +1.7 |
+| can | 90.00 | 87.5 | -2.5 |
+| cat | 53.33 | 56.7 | +3.3 |
+| driller | 91.67 | 92.5 | +0.8 |
+| duck | 33.33 | 31.7 | -1.7 |
+| eggbox | 97.50 | 96.7 | -0.8 |
+| glue | 75.00 | 79.2 | **+4.2** |
+| holepuncher | 24.17 | 31.7 | **+7.5** |
+| iron | 89.17 | 88.3 | -0.8 |
+| lamp | 87.50 | 90.8 | +3.3 |
+| phone | 62.50 | 65.8 | +3.3 |
+| **MEAN** | **67.44** | **69.36** | **+1.92** |
+| Proj | 81.54 | 81.67 | +0.13 |
+| 5cm5° | 66.54 | 66.99 | +0.45 |
+
+**结论**：弱物体普遍受益（holepuncher +7.5、ape +6.7、glue +4.2、cat/lamp/phone
++3.3），强物体 ±2.5 内波动（噪声级）。深度一致性清错对应对 D 类有效，净 +1.9。
+GSPose 92.0 仍差 22.6，主要缺口在 holepuncher/duck/ape（31-38）。

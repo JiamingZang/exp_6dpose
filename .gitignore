@@ -17,3 +17,4 @@ env.sh
 *.log
 third_party/mast3r/
 .ipynb_checkpoints/
+citecoon_*.tar.gz

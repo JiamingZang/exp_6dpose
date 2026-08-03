@@ -384,7 +384,6 @@ class Mast3rMatcher:
                         pix_t_all[it[m_ok]].astype(np.float64), ss[m_ok],
                         n_sample=n_sample, rng=rng,
                         extras=[p3q_all[iq[m_ok]]])
-                    p3q = p3q[0]
                 else:
                     p2, p3, ss_ = sample_correspondences(
                         pix_q_all[iq[m_ok]].astype(np.float64),
@@ -452,7 +451,6 @@ class Mast3rMatcher:
                     pix_t[it].astype(np.float64), sims_fwd[ok],
                     n_sample=n_sample, rng=rng,
                     extras=[p3_q[iq]])
-                p3q = p3q[0]
             else:
                 p2, p3, ss = sample_correspondences(
                     pix_q_all[iq].astype(np.float64),

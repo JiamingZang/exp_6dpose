@@ -1,0 +1,6 @@
+base: dense80_depthc.yaml
+
+matching:
+  geom_filter: true
+  geom_tau_frac: 0.2
+  geom_iters: 200
