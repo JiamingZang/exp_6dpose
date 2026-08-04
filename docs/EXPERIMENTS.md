@@ -295,3 +295,35 @@ array"），can coord 提取 39 帧后中断，评估缺帧失败。
 
 **教训**：can 30k+invdepth 63.3（-24.2）结果存疑（提取于环境污染窗口），
 30k+coord 对照实验用修复后环境重提的匹配重新评估中。
+
+---
+
+## refiner 负贡献发现 + 裸 PnP 回滚（08-05）
+
+**30k 批量重训失败**（13 物体：3 涨 9 跌 1 平，glue -60.9 灾难）→ 回滚 .orig bank。
+
+**关键发现**：30k 重训的 refiner .pt 是负贡献——benchvise .orig+30krefiner 76.7 < 裸 PnP
+84.2；can .orig+30krefiner 69.2 < 裸 PnP 92.5；holepuncher 30k 带 refine 36.7 < 裸 PnP 51.7。
+裸 PnP（refine_pose=false）为默认口径。
+
+**回滚后全 13 物体**（裸 PnP）：
+
+| 物体 | dc2 | 回滚 | Δ | bank 来源 |
+|------|-----|------|---|----------|
+| ape | 37.5 | 42.5 | +5.0 | 30k |
+| benchvise | 84.2 | 84.2 | 0 | .orig |
+| cam | 59.2 | 61.7 | +2.5 | .orig(bg1) |
+| can | 87.5 | 92.5 | +5.0 | .orig |
+| cat | 56.7 | 45.8 | -10.9 | .orig |
+| driller | 92.5 | 91.7 | -0.8 | .orig(bg1) |
+| duck | 31.7 | 31.7 | 0 | 30k |
+| eggbox | 96.7 | 96.7 | 0 | .orig |
+| glue | 79.2 | 77.5 | -1.7 | .orig |
+| holepuncher | 31.7 | 51.7 | **+20.0** | 30k |
+| iron | 88.3 | 88.3 | 0 | .orig |
+| lamp | 90.8 | 92.5 | +1.7 | .orig |
+| phone | 65.8 | 65.8 | 0 | .orig |
+| **MEAN** | **69.36** | **70.97** | **+1.6** | |
+
+**待办**：cat 需 refiner（dc2 靠旧 7000 refiner 正贡献），30k refiner 对照评估中；
+弱项 ape/cat/duck/holepuncher（31-52）是超 GSPose 92.0 的主要缺口。
