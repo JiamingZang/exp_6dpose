@@ -278,3 +278,20 @@ GSPose 92.0 仍差 22.6，主要缺口在 holepuncher/duck/ape（31-38）。
 UnboundLocalError 崩溃）；verify_align_select.py 更新为 exp_30k13 缓存路径。
 
 **待办**：can 30k+coord 结果 → 决定全量 9 物体 30k 流水线（extract9_all/eval30k_all 已备）。
+
+---
+
+## 环境事故：numpy 2.x 残留污染 cv2（08-04 晚）
+
+**症状**：提取/评估 cv2 全挂（imread 返回 None、resize 报 "src is not a numpy
+array"），can coord 提取 39 帧后中断，评估缺帧失败。
+
+**根因**：numpy 包被 2.x/1.26 文件混装——`site-packages/numpy/_core/` 残留
+7 个 numpy 2.x 的 .so（7-31 安装 2.x 后降级 1.26.4 未清残留）。cv2 绑定检测到
+`numpy._core` 存在走错 API 路径，PyArray_Check 全失败。
+
+**修复**：`rm -rf site-packages/numpy*` 后全新安装 numpy==1.26.4。
+验证：cv2 resize/imread 恢复，torch 2.8 / scipy 1.17 正常。
+
+**教训**：can 30k+invdepth 63.3（-24.2）结果存疑（提取于环境污染窗口），
+30k+coord 对照实验用修复后环境重提的匹配重新评估中。
