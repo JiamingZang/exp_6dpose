@@ -1,0 +1,4 @@
+base: dense80_train30k.yaml
+
+matching:
+  batch_size: 4

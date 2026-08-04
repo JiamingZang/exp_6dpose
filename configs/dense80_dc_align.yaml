@@ -1,0 +1,5 @@
+base: dense80_dc_b4.yaml
+
+solver:
+  render_align_select: true
+  render_select_n: 5

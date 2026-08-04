@@ -253,3 +253,28 @@ baseline 为 3 节主表，即 dense80_depth 系列）：
 **结论**：弱物体普遍受益（holepuncher +7.5、ape +6.7、glue +4.2、cat/lamp/phone
 +3.3），强物体 ±2.5 内波动（噪声级）。深度一致性清错对应对 D 类有效，净 +1.9。
 GSPose 92.0 仍差 22.6，主要缺口在 holepuncher/duck/ape（31-38）。
+
+---
+
+## 30k 训练 + invdepth 锚点验证（3 物体，120 帧/物体，exp_30k13）
+
+30k 迭代 + 128 参考帧（GSPose 同规格训练）后全物体重训（bank 含 invdepth 锚点 + train_fp）。
+提取/评估配置 `dense80_dc_b4.yaml`（= dc2 同口径 + batch 4 防 OOM）。
+
+| 物体 | dc2 基线 | 30k+invdepth | Δ |
+|---|---|---|---|
+| ape | 37.5 | **45.8** | **+8.3** |
+| can | 87.5 | 63.3 | **-24.2** |
+| duck | 31.7 | 33.3 | +1.6 |
+| holepuncher（先行） | 31.7 | 36.7 | **+5.0** |
+
+**can 回归定位**（exp_30k13 缓存交叉分析）：
+- 44 帧坏帧中 32 帧 dc2（7000+coord）下是好的 → 回归来自 bank 变化（30k 训练 or invdepth 锚点）
+- align_loss/mask_iou 判对 23/23（爆炸帧 GT 优于被选 best）→ 择优是表层的
+- align_select 重评估只修 10 帧又坏 13 帧（60.8 < 63.3）→ **择优不是根因**
+- 验证中：can 30k+coord bank（重渲染，不动 3DGS）区分训练 vs 锚点贡献
+
+**修复**：pipeline.py render_align_select 分支补 rs_triggered/rs_iou 赋值（此前
+UnboundLocalError 崩溃）；verify_align_select.py 更新为 exp_30k13 缓存路径。
+
+**待办**：can 30k+coord 结果 → 决定全量 9 物体 30k 流水线（extract9_all/eval30k_all 已备）。

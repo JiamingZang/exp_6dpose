@@ -1145,6 +1145,10 @@ class PoseEstimator:
                     best_la, best_r = la, r
             if best_r is not best:
                 best = best_r
+            iou_min = float(s_cfg.get("render_select_min", 0.4))
+            rs_iou = self._verifier.mask_iou(best.R, best.t, K_crop,
+                                             ex["mask_crop"])
+            rs_triggered = rs_iou < iou_min
             timings["render_select"] = time.time() - t0
         elif (bool(s_cfg.get("render_select", False))
                 and self._verifier is not None):
