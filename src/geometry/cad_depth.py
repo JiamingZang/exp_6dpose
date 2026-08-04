@@ -10,11 +10,14 @@ import numpy as np
 
 
 def rasterize_cad_depth(verts, faces, R, t, K, size):
-    """CAD 网格 z-buffer 光栅化，返回精确表面深度图 (size,size) float32。
+    """CAD 网格 z-buffer 光栅化，返回精确表面深度图 (H,W) float32。
 
     verts/faces: 模型顶点与三角面；R,t: w2c 位姿；K: 整数像素索引约定。
-    0 = 无命中。
+    0 = 无命中。size 传 (H,W) 或正方形 int（历史调用兼容）。
     """
+    if isinstance(size, int):
+        size = (size, size)
+    H_, W_ = size
     P = (R @ verts.T).T + t                      # (N,3) 相机系
     z = P[:, 2]
     vis = z > 0
@@ -23,9 +26,9 @@ def rasterize_cad_depth(verts, faces, R, t, K, size):
     proj[vis, 1] = P[vis, 1] / z[vis] * K[1, 1] + K[1, 2]
     proj[vis, 2] = z[vis]
 
-    depth = np.zeros((size, size), dtype=np.float32)
-    xs = np.arange(size)
-    ys = np.arange(size)
+    depth = np.zeros((H_, W_), dtype=np.float32)
+    xs = np.arange(W_)
+    ys = np.arange(H_)
     for tri in faces:
         v = proj[tri]                            # (3,3): x,y,z
         if (v[:, 2] <= 0).any():
@@ -34,9 +37,9 @@ def rasterize_cad_depth(verts, faces, R, t, K, size):
         # 不做背面剔除：屏幕 y 向下的绕序约定易错，z-buffer 本身
         # 保证只保留最近的正面（背面深度更大，会被正面覆盖）
         xmin = max(0, int(np.floor(min(x0, x1, x2))))
-        xmax = min(size - 1, int(np.ceil(max(x0, x1, x2))))
+        xmax = min(W_ - 1, int(np.ceil(max(x0, x1, x2))))
         ymin = max(0, int(np.floor(min(y0, y1, y2))))
-        ymax = min(size - 1, int(np.ceil(max(y0, y1, y2))))
+        ymax = min(H_ - 1, int(np.ceil(max(y0, y1, y2))))
         if xmin > xmax or ymin > ymax:
             continue
         gx, gy = np.meshgrid(xs[xmin:xmax + 1], ys[ymin:ymax + 1])

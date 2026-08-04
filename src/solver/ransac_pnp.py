@@ -63,7 +63,8 @@ def ransac_pnp(pts2d: np.ndarray, pts3d: np.ndarray, K: np.ndarray,
                pix_scale: Optional[tuple] = None,
                q_img: Optional[np.ndarray] = None,
                t_img: Optional[np.ndarray] = None,
-               subpixel_px: float = 0.0) -> PnPResult:
+               subpixel_px: float = 0.0,
+               ransac_hypotheses: int = 1) -> PnPResult:
     """RANSAC-EPnP + LM 精化。
 
     Args:
@@ -90,7 +91,8 @@ def ransac_pnp(pts2d: np.ndarray, pts3d: np.ndarray, K: np.ndarray,
     """
     res = _ransac_pnp_core(
         pts2d, pts3d, K, reproj_px, confidence, iterations, refine_lm,
-        min_correspondences, flag, sym_transforms, pts3d_q, depth_tau_frac)
+        min_correspondences, flag, sym_transforms, pts3d_q, depth_tau_frac,
+        ransac_hypotheses)
     if (res.success and subpixel_px > 0 and q_img is not None
             and t_img is not None and pix_t is not None
             and pix_q_match is not None and pix_scale is not None):
@@ -106,7 +108,8 @@ def _ransac_pnp_core(pts2d: np.ndarray, pts3d: np.ndarray, K: np.ndarray,
                      flag: str = "epnp",
                      sym_transforms: Optional[List[np.ndarray]] = None,
                      pts3d_q: Optional[np.ndarray] = None,
-                     depth_tau_frac: float = 0.0) -> PnPResult:
+                     depth_tau_frac: float = 0.0,
+                     ransac_hypotheses: int = 1) -> PnPResult:
     """RANSAC-EPnP + LM 精化（核心，subpixel 精化由外层 ransac_pnp 包装）。"""
     solver_flag = _pnp_flag(flag)
     pts3d = np.ascontiguousarray(pts3d, dtype=np.float64).reshape(-1, 3)
@@ -126,35 +129,46 @@ def _ransac_pnp_core(pts2d: np.ndarray, pts3d: np.ndarray, K: np.ndarray,
     pts2d = pts2d.reshape(-1, 1, 2)
     pts3d = pts3d.reshape(-1, 1, 3)
 
-    ok, rvec, tvec, inliers = cv2.solvePnPRansac(
-        pts3d, pts2d, K, distCoeffs=None,
-        reprojectionError=float(reproj_px),
-        confidence=float(confidence),
-        iterationsCount=int(iterations),
-        flags=solver_flag,
-    )
-    if not ok or inliers is None or len(inliers) < 4:
-        return PnPResult(success=False, n_correspondences=n)
-    inlier_idx = inliers.reshape(-1).astype(np.int64)
-
-    if refine_lm:
-        # LM 只在内点集上跑：外点会把最小二乘拉偏，这正是 RANSAC 先筛的意义
-        try:
-            rvec, tvec = cv2.solvePnPRefineLM(
-                pts3d[inlier_idx], pts2d[inlier_idx], K, None, rvec, tvec)
-        except cv2.error:
-            pass  # 精化失败就退回 RANSAC 解，不影响成功判定
-
-    R, _ = cv2.Rodrigues(rvec)
-    # 内点平均重投影残差：在最终位姿（含 LM 精化）上重算，供 reproj 择优
-    # （selection.py）。RANSAC 内部的残差是精化前的，不能直接用。
-    uv, _ = cv2.projectPoints(pts3d[inlier_idx], rvec, tvec, K, None)
-    residual = np.linalg.norm(
-        uv.reshape(-1, 2) - pts2d[inlier_idx].reshape(-1, 2), axis=1)
-    return PnPResult(success=True, R=R, t=tvec.reshape(3),
-                     n_inliers=len(inlier_idx), inlier_idx=inlier_idx,
-                     n_correspondences=n,
-                     mean_inlier_reproj_px=float(residual.mean()))
+    # 多假设 RANSAC：小物体 tz 病态下错误模型与正确模型在 ε 内点都多，
+    # 单次随机采样可能停在错误模型；跑 K 次取 LM 后内点最多（平局取
+    # 残差更小）的假设，提高选到正确模型的概率。
+    best_r = None
+    for _ in range(max(1, int(ransac_hypotheses))):
+        ok, rvec, tvec, inliers = cv2.solvePnPRansac(
+            pts3d, pts2d, K, distCoeffs=None,
+            reprojectionError=float(reproj_px),
+            confidence=float(confidence),
+            iterationsCount=int(iterations),
+            flags=solver_flag,
+        )
+        if not ok or inliers is None or len(inliers) < 4:
+            continue
+        inlier_idx = inliers.reshape(-1).astype(np.int64)
+        rvec_lm, tvec_lm = rvec, tvec
+        if refine_lm:
+            # LM 只在内点集上跑：外点会把最小二乘拉偏，这正是 RANSAC 先筛的意义
+            try:
+                rvec_lm, tvec_lm = cv2.solvePnPRefineLM(
+                    pts3d[inlier_idx], pts2d[inlier_idx], K, None,
+                    rvec, tvec)
+            except cv2.error:
+                pass  # 精化失败就退回 RANSAC 解，不影响成功判定
+        uv, _ = cv2.projectPoints(pts3d[inlier_idx], rvec_lm, tvec_lm,
+                                  K, None)
+        residual = np.linalg.norm(
+            uv.reshape(-1, 2) - pts2d[inlier_idx].reshape(-1, 2), axis=1)
+        if (best_r is None or len(inlier_idx) > best_r.n_inliers
+                or (len(inlier_idx) == best_r.n_inliers
+                    and float(residual.mean())
+                    < best_r.mean_inlier_reproj_px)):
+            R, _ = cv2.Rodrigues(rvec_lm)
+            best_r = PnPResult(success=True, R=R, t=tvec_lm.reshape(3),
+                               n_inliers=len(inlier_idx),
+                               inlier_idx=inlier_idx,
+                               n_correspondences=n,
+                               mean_inlier_reproj_px=float(residual.mean()))
+    return best_r if best_r is not None else PnPResult(
+        success=False, n_correspondences=n)
 
 
 def _ransac_pnp_sym(pts2d, pts3d, K, sym_Ts, reproj_px, confidence,

@@ -52,6 +52,17 @@ class TemplateBank:
         self.images = d["images"]            # (M,S,S,3) uint8
         self.alphas = d["alphas"].astype(np.float32)
         self.coord_maps = d["coord_maps"]    # (M,S,S,3) 对齐尺度物体系
+        # 锚点渲染方式：invdepth（逆深度混合，当前正确口径，深度偏差
+        # ~0.03%）| coord（μ 位置混合，历史口径，深度系统性偏大 1.7%）。
+        # 缺失字段 = 旧库（coord 或已 patch 无标记）——只警告不阻断。
+        self.anchor_mode = d["anchor_mode"] if "anchor_mode" in d else None
+        if self.anchor_mode is not None and self.anchor_mode != "invdepth":
+            import warnings
+            warnings.warn(
+                f"模板库锚点渲染方式为 {self.anchor_mode!r}（期望 invdepth）："
+                f"μ 位置混合锚点深度系统性偏大 ~1.7%，会污染 PnP 深度。"
+                f"请运行 scripts/patch_depth_anchor_maps.py 后重评估。"
+                f"（{npz_path}）", stacklevel=2)
         self.poses = d["poses"]              # (M,4,4) w2c
         self.K = d["K"]
         if "scale" not in d:
@@ -127,17 +138,56 @@ def onboard_object(cfg: Dict, obj_name: str, device: str = "cuda",
     out_path = template_bank_path(cfg, obj_name)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 幂等：模板库 npz（含 scale/dino_feats）与 3DGS 参数 .pt 都在即跳过，
-    # 全量 13 物体不必每次重训（产物是确定性的，配置变了由文件名区分——
-    # 注意 image_size/train_crop 不参与文件名，改它们需手动删旧库）
+    # 幂等：模板库 npz（含 scale/dino_feats）与 3DGS 参数 .pt 都在，且
+    # 训练指纹与配置一致才跳过。指纹不一致（迭代数/参考帧数/深度监督/
+    # 锚点渲染方式/背景色等变了）必须重训——文件名不含这些参数，静默
+    # 复用旧库会让"改了配置但没生效"（30k 迭代事故，08-04）。
+    def _train_fingerprint(cfg_):
+        return {
+            "iterations": int(cfg_["gaussian"].get("iterations", 7000)),
+            "n_ref_views": int(cfg_["onboard"].get("n_ref_views", 64)),
+            "depth_l1_weight": float(cfg_["gaussian"].get("depth_l1_weight", 0.0)),
+            "bg_color": float(cfg_["onboard"].get("bg_color", 1.0)),
+            "anchor_mode": "invdepth",
+        }
+
+    fp_cfg = _train_fingerprint(cfg)
     if out_path.exists() and out_path.with_suffix(".pt").exists():
+        stale = None
         try:
-            TemplateBank(out_path)
-            if verbose:
-                print(f"[onboard:{obj_name}] 模板库已存在，跳过: {out_path}")
-            return out_path
-        except ValueError:
-            pass    # 残留/不完整文件，重新 onboard
+            with np.load(out_path, allow_pickle=False) as d:
+                if "train_fp" in d:
+                    raw = d["train_fp"].item()
+                    fp_bank = {k: float(v) if hasattr(v, "item")
+                               else v for k, v in raw.items()}
+                else:
+                    fp_bank = None
+            if fp_bank is None:
+                # 旧库无指纹：无法确认训练配置，保守强制重训
+                # （patch 后的库也不写指纹——指纹只有新 onboard 写）
+                stale = "train_fp 缺失（旧库，无法确认配置）"
+            else:
+                for k, v in fp_cfg.items():
+                    if k in fp_bank and abs(float(fp_bank[k]) - float(v)) > 1e-9:
+                        stale = f"{k}: bank={fp_bank[k]} cfg={v}"
+                        break
+                if stale is None and "anchor_mode" in fp_bank:
+                    if str(fp_bank["anchor_mode"]) != "invdepth":
+                        stale = "anchor_mode 非 invdepth"
+        except Exception:      # noqa: BLE001
+            stale = "train_fp 读取失败"
+        if stale is None:
+            try:
+                TemplateBank(out_path)
+                if verbose:
+                    print(f"[onboard:{obj_name}] 模板库已存在且指纹一致，"
+                          f"跳过: {out_path}")
+                return out_path
+            except ValueError:
+                pass    # 残留/不完整文件，重新 onboard
+        else:
+            print(f"[onboard:{obj_name}] 模板库指纹不一致（{stale}），"
+                  f"强制重训 → {out_path}")
 
     # ---- 1. 几何初始化 ----
     geo_src = cfg["geometry"].get("source", "cad")
@@ -223,6 +273,15 @@ def onboard_object(cfg: Dict, obj_name: str, device: str = "cuda",
     # 训练/渲染背景色写入 bank：下游 extract 的裁剪填色必须与此一致，
     # 否则静默域不匹配（浅色物体黑背景、深色物体白背景，见 EXPERIMENTS）
     bank["bg_color"] = np.float32(float(cfg["onboard"].get("bg_color", 1.0)))
+    # 训练指纹（幂等校验用，见 onboard_object 开头）：配置变了强制重训，
+    # 不静默复用旧库
+    bank["train_fp"] = np.array({
+        "iterations": int(cfg["gaussian"].get("iterations", 7000)),
+        "n_ref_views": int(cfg["onboard"].get("n_ref_views", 64)),
+        "depth_l1_weight": float(cfg["gaussian"].get("depth_l1_weight", 0.0)),
+        "bg_color": float(cfg["onboard"].get("bg_color", 1.0)),
+        "anchor_mode": "invdepth",
+    })
     # ---- 8. VGGT 路线：重建系→CAD 系相似变换（仅评测对齐）----
     if recon_for_align is not None and ds.model_path.exists():
         cad_verts, _, _ = load_ply(ds.model_path)
@@ -504,7 +563,12 @@ class PoseEstimator:
                 early_stop_patience=int(
                     sc.get("refine_early_stop_patience", 0)),
                 early_stop_tol=float(
-                    sc.get("refine_early_stop_tol", 1e-4)))
+                    sc.get("refine_early_stop_tol", 1e-4)),
+                supersample=int(sc.get("refine_supersample", 1)),
+                stage1_iters=int(sc.get("refine_stage1_iters", 0)),
+                lambda_area=float(sc.get("refine_area_lambda", 0.0)),
+                area_gate_dice=float(
+                    sc.get("refine_area_gate_dice", 0.0)))
             # 多假设精化的轻量种子搜索器：SSIM-only 短迭代（快），只负责
             # 在扰动种子里粗筛出好盆地；最终精化仍由 LPIPS 主 refiner 完成
             if bool(sc.get("multi_hypo", False)):
@@ -1054,13 +1118,35 @@ class PoseEstimator:
         best, results = solved
         timings["pnp"] = time.time() - t0
 
-        # ---- 渲染 IoU 校验（render_select）：条件触发式。
-        # 先算联合 PnP 后 best 的渲染 mask IoU：好位姿渲染与 FastSAM 掩码
-        # 高度重叠（实测 mean 0.76，仅 6% < 0.4），爆炸位姿几乎不重叠
-        # （mean 0.09，91% < 0.4）。IoU 达标直接输出（不干扰正常帧）；
-        # 低于阈值（疑似爆炸）才在 [best + 逐模板 ranked 前 K] 池里重选
-        # IoU 最高的候选补救。
-        if (bool(s_cfg.get("render_select", False))
+        # ---- 渲染择优（render_select / render_align_select）----
+        # render_select：mask IoU 条件触发式（IoU<0.4 才在 top-K 池重选
+        # IoU 最高的候选）。注意 IoU 对 tz 方向爆炸不敏感（tz 偏 300mm
+        # 掩码缩放后 IoU 仍 >0.4，can 事故 08-04）。
+        # render_align_select：每帧直接对 [best + ranked top-K] 算渲染
+        # 对齐损失（L1+SSIM，内容错位敏感）选最小——tz 爆炸位姿渲染与
+        # 真实图完全错位，损失显著高于正确位姿（区分度实测见
+        # scripts/verify_align_select.py）。每候选 ~30ms 前向渲染。
+        if (bool(s_cfg.get("render_align_select", False))
+                and self._verifier is not None):
+            t0 = time.time()
+            x0, y0, _, _ = ex["crop_box_used"]
+            K_crop = K_query.copy()
+            K_crop[0, 2] -= x0
+            K_crop[1, 2] -= y0
+            sel_n = int(s_cfg.get("render_select_n", 5))
+            ranked = rank_candidates(
+                results, strategy=s_cfg.get("selection", "inlier"))
+            cands = [best] + [r for r in ranked[:sel_n] if r is not best]
+            best_la, best_r = float("inf"), best
+            for r in cands:
+                la = self._verifier.align_loss(ex["crop"], ex["mask_crop"],
+                                               K_crop, r.R, r.t)
+                if la < best_la:
+                    best_la, best_r = la, r
+            if best_r is not best:
+                best = best_r
+            timings["render_select"] = time.time() - t0
+        elif (bool(s_cfg.get("render_select", False))
                 and self._verifier is not None):
             t0 = time.time()
             x0, y0, _, _ = ex["crop_box_used"]
@@ -1482,21 +1568,26 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
         meta = {"matches_dir": matches_dir,
                 "cfg_hash": hashlib.sha1(_json.dumps(
                     cfg, sort_keys=True, default=str).encode()).hexdigest()}
+        # 帧级指纹隔离：缓存文件可能被不同配置的追加写污染（refine2 追加
+        # dc2 事故，08-04）。meta 不匹配时绝不追加进同一文件，而是写到
+        # <stem>_<hash8>.jsonl 独立文件；读时逐行校验帧自身指纹。
         if cp.exists() and cp.stat().st_size > 0:
-            first = cp.read_text().splitlines()[:1]
-            if first:
-                try:
-                    head = _json.loads(first[0])
-                    if head.get("__meta__") == meta:
-                        for line in cp.read_text().splitlines()[1:]:
-                            if line.strip():
-                                try:
-                                    rec = _json.loads(line)
-                                    cache[int(rec["frame_id"])] = rec
-                                except (KeyError, ValueError, TypeError):
-                                    pass
-                except (ValueError, TypeError):
-                    pass
+            lines = cp.read_text().splitlines()
+            head = _json.loads(lines[0]) if lines and lines[0].strip() else None
+            if head and head.get("__meta__") == meta:
+                for line in lines[1:]:
+                    if not line.strip():
+                        continue
+                    try:
+                        rec = _json.loads(line)
+                        if rec.get("cfg_hash") == meta["cfg_hash"]:
+                            cache[int(rec["frame_id"])] = rec
+                    except (KeyError, ValueError, TypeError):
+                        pass
+            else:
+                # 污染/异指纹文件：物理隔离到指纹专属文件，不碰原文件
+                h8 = meta["cfg_hash"][:8]
+                cp = cp.with_name(f"{cp.stem}_{h8}.jsonl")
         cache_fh = open(cp, "a")
         if cp.stat().st_size == 0:
             cache_fh.write(_json.dumps({"__meta__": meta}) + "\n")
@@ -1605,6 +1696,7 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
         if cache_fh is not None:
             rec = {
                 "frame_id": int(fr.frame_id),
+                "cfg_hash": meta["cfg_hash"],   # 帧级指纹（读时过滤）
                 "success": bool(res.success),
                 "R": (res.R.tolist() if res.success else None),
                 "t": (res.t.tolist() if res.success else None),

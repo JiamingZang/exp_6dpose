@@ -73,11 +73,27 @@ def render_template_bank(trainer, cfg_templates: Dict, out_path,
             # 背景合成为纯色（DINOv2/MASt3R 输入更干净）
             rgb = rgb + (1.0 - alpha) * bg_color
 
-            # 3D 坐标图：μ 作为颜色 alpha 混合
-            cm, alpha_c, _ = trainer.render(T, K_render, size, size,
-                                            colors_override=centers)
-            cm = cm / torch.clamp(alpha_c, min=1e-6)     # 归一化补偿透射衰减
+            # 3D 坐标图：逆深度混合（expected_invdepth，官方
+            # depth-regularization 同款，见 scripts/patch_depth_anchor_maps.py
+            # 与 docs/RESEARCH_LOG.md §2-4）。直接 μ 位置混合会被深层高斯
+            # 泄漏拉远（中心壳偏内 4-7%，PnP 深度系统性偏浅/偏深），逆深度
+            # 混合近处高斯主导，锚点深度与真实表面一致（实测偏差 +0.03%）。
+            Tt = torch.tensor(T, dtype=torch.float32, device=centers.device)
+            z_cam = (centers @ Tt[:3, :3].T + Tt[:3, 3])[:, 2:3]  # (N,1)
+            inv_d, alpha_c, _ = trainer.render(
+                T, K_render, size, size,
+                colors_override=1.0 / z_cam.clamp(min=1e-3))
+            z_mix = 1.0 / torch.clamp(inv_d[..., 0], min=1e-9)
             fg = a > ALPHA_FG_THRESH
+            z_mix = torch.where(fg, z_mix, torch.zeros_like(z_mix))
+            ys, xs = torch.nonzero(z_mix > 0, as_tuple=True)
+            pc = torch.stack([
+                (xs.float() - K[0, 2]) / K[0, 0] * z_mix[ys, xs],
+                (ys.float() - K[1, 2]) / K[1, 1] * z_mix[ys, xs],
+                z_mix[ys, xs]], dim=1)
+            po = (pc - Tt[:3, 3]) @ Tt[:3, :3]          # 物体系
+            cm = torch.zeros((size, size, 3), device=z_mix.device)
+            cm[ys, xs] = po
             cm[~fg] = 0.0
 
             images.append((rgb.cpu().numpy() * 255).astype(np.uint8))
@@ -102,6 +118,8 @@ def render_template_bank(trainer, cfg_templates: Dict, out_path,
         "poses": poses.astype(np.float32),
         "K": K.astype(np.float32),
         "radius": np.float32(radius),
+        "anchor_mode": "invdepth",   # 锚点渲染方式：invdepth（当前，官方
+        # expected_invdepth 同款）| coord（μ 位置混合，历史口径，弃用）
     }
     if store_depth:
         bank["depth_maps"] = np.stack(depth_maps)

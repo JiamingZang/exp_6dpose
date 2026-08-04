@@ -46,7 +46,11 @@ class PoseRefiner:
                  lr: float = 0.02, iterations: int = 150,
                  bg_color: float = 1.0,
                  early_stop_patience: int = 0,
-                 early_stop_tol: float = 1e-4):
+                 early_stop_tol: float = 1e-4,
+                 supersample: int = 1,
+                 stage1_iters: int = 0,
+                 lambda_area: float = 0.0,
+                 area_gate_dice: float = 0.0):
         import gsplat
         from pathlib import Path
         p = Path(ckpt_path)
@@ -63,6 +67,10 @@ class PoseRefiner:
         self.bg_color = bg_color
         self.early_stop_patience = early_stop_patience
         self.early_stop_tol = early_stop_tol
+        self.supersample = int(supersample)
+        self.stage1_iters = int(stage1_iters)
+        self.lambda_area = float(lambda_area)
+        self.area_gate_dice = float(area_gate_dice)
 
         ck = torch.load(p, map_location=device, weights_only=False)
         self.splats = {}
@@ -84,13 +92,23 @@ class PoseRefiner:
 
     # ------------------------------------------------------------------
     def _render(self, R: torch.Tensor, t: torch.Tensor,
-                K: torch.Tensor, width: int, height: int):
-        """按 w2c (R,t) 渲染当前 3DGS，返回 (composed (H,W,3) [0,1], alpha)。"""
+                K: torch.Tensor, width: int, height: int,
+                scale: int = 1):
+        """按 w2c (R,t) 渲染当前 3DGS，返回 (composed (H,W,3) [0,1], alpha)。
+
+        scale>1 时按 scale× 分辨率渲染（K 的 fx/fy/cx/cy 同比例放大）：
+        小物体轮廓/尺度信号被放大，tz 方向梯度更强（病态帧专用）。
+        """
         viewmat = torch.eye(4, device=self.device)
         viewmat[:3, :3] = R
         viewmat[:3, 3] = t
         viewmat = viewmat[None]
         Ks = K.clone()[None]
+        if scale > 1:
+            Ks[:, 0, 0] *= scale
+            Ks[:, 1, 1] *= scale
+            Ks[:, 0, 2] *= scale
+            Ks[:, 1, 2] *= scale
         colors = torch.cat([self.splats["sh0"], self.splats["shN"]], dim=1)
         renders, alphas, _ = self.gsplat.rasterization(
             means=self.splats["means"],
@@ -98,7 +116,8 @@ class PoseRefiner:
             scales=torch.exp(self.splats["scales"]),
             opacities=torch.sigmoid(self.splats["opacities"]),
             colors=colors,
-            viewmats=viewmat, Ks=Ks, width=width, height=height,
+            viewmats=viewmat, Ks=Ks,
+            width=width * scale, height=height * scale,
             sh_degree=self.sh_degree, packed=False,
         )
         rgb = renders[0].clamp(0, 1)
@@ -134,37 +153,69 @@ class PoseRefiner:
                            device=self.device)[None]   # (1,H,W)
         Kt = torch.tensor(K, dtype=torch.float32, device=self.device)
 
+        s = self.supersample
+        if s > 1:
+            import torch.nn.functional as F
+            gt = F.interpolate(gt[None], scale_factor=s, mode="bilinear",
+                               align_corners=False)[0]
+            msk = F.interpolate(msk[None], scale_factor=s, mode="nearest")[0]
+
         R0t = torch.tensor(R0, dtype=torch.float32, device=self.device)
         t0t = torch.tensor(t0, dtype=torch.float32, device=self.device)
+        a_msk = msk.sum()                               # 查询前景面积（放大域）
+        best_loss = float("inf")
+
+        def _step_loss(R, t):
+            """单步损失：交集掩码 L1 + SSIM + 面积对数正则（Dice 门控）。"""
+            composed, alpha = self._render(R, t, Kt, W, H, scale=s)
+            comp = composed.permute(2, 0, 1)           # (3,H,W)
+            a = alpha[..., 0]                          # (H,W)
+            ov = (a > 0.5) & (msk[0] > 0.5)
+            # 交集掩码内 L1：遮挡/分割不一致区域（只有一边是前景）不参与
+            # 光度对齐，避免查询掩码污染把位姿拉偏
+            if ov.sum() >= 16:
+                l1 = (torch.abs(comp - gt) * ov).sum() / ov.sum()
+            else:
+                l1 = (torch.abs(comp - gt) * msk[0]).sum() / msk.sum().clamp(min=1)
+            ssim_val = self.ssim_fn(comp[None], gt[None])
+            loss = (self.lambda_l1 * l1
+                    + self.lambda_ssim * (1.0 - ssim_val))
+            if self.lpips is not None and self.lambda_lpips > 0:
+                lp = self.lpips(comp[None] * 2 - 1, gt[None] * 2 - 1).mean()
+                loss = loss + self.lambda_lpips * lp
+            dice = (2 * (msk[0] * a).sum()
+                    / (msk.sum() + a.sum() + 1e-6))
+            loss = loss - self.lambda_dice * dice
+            # 面积对数正则：渲染面积与查询面积比直接约束 tz（尺度信号，
+            # 对 tz 的梯度远强于光度项）。Dice 门控：掩码被遮挡污染时
+            # （IoU 低）关掉，防面积偏差把 tz 拉偏。
+            if (self.lambda_area > 0 and self.area_gate_dice > 0
+                    and float(dice.detach()) >= self.area_gate_dice):
+                ratio = (a.sum() + 1e-6) / (a_msk + 1e-6)
+                loss = loss + self.lambda_area * torch.log(ratio) ** 2
+            return loss
+
+        # 阶段 1：只优化平移（tx,ty,tz）。旋转不变时，面积/轮廓对平移有
+        # 直接梯度，先把 tz 拉回；全 6D 一起动时小物体容易陷在光度局部极小。
+        if self.stage1_iters > 0:
+            td = torch.zeros(3, device=self.device, requires_grad=True)
+            opt1 = torch.optim.Adam([td], lr=self.lr)
+            for _ in range(self.stage1_iters):
+                loss = _step_loss(R0t, t0t + td)
+                loss.backward()
+                opt1.step()
+                opt1.zero_grad(set_to_none=True)
+            t0t = (t0t + td.detach()).clone()
+
+        # 阶段 2：全 6D se(3) 增量
         delta = torch.zeros(6, device=self.device, requires_grad=True)
         opt = torch.optim.Adam([delta], lr=self.lr)
-
-        from .ssim import ssim as ssim_fn
-        last_loss = float("inf")
-        best_loss = float("inf")
         stale = 0
         for it in range(self.iterations):
             dR, dt = _se3_exp(delta[:3], delta[3:])
             R = dR @ R0t
             t = dR @ t0t + dt
-            composed, alpha = self._render(R, t, Kt, W, H)
-            comp = composed.permute(2, 0, 1)           # (3,H,W)
-            # 掩码内 L1（背景已与渲染合成色对齐，全图算也不污染梯度主项）
-            l1 = (torch.abs(comp - gt) * msk).sum() / msk.sum().clamp(min=1)
-            ssim_val = ssim_fn(comp[None], gt[None])
-            loss = (self.lambda_l1 * l1
-                    + self.lambda_ssim * (1.0 - ssim_val))
-            # LPIPS(VGG) 单次前向 ~10ms，是迭代里最贵的一项；GS-Pose 只用
-            # SSIM 系损失即可收敛，lambda_lpips=0 时彻底跳过（省 2/3 耗时）
-            if self.lpips is not None and self.lambda_lpips > 0:
-                lp = self.lpips(comp[None] * 2 - 1, gt[None] * 2 - 1).mean()
-                loss = loss + self.lambda_lpips * lp
-            # 渲染轮廓与分割掩码的 Dice：轮廓对齐对平移是强几何约束，
-            # 防止 mask 边界误差把位姿拉偏
-            a = alpha[..., 0]
-            dice = (2 * (msk[0] * a).sum()
-                    / (msk.sum() + a.sum() + 1e-6))
-            loss = loss - self.lambda_dice * dice
+            loss = _step_loss(R, t)
             loss.backward()
             opt.step()
             opt.zero_grad(set_to_none=True)

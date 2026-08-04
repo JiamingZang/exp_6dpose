@@ -1,0 +1,10 @@
+base: dense80_depthc_guided.yaml
+
+gaussian:
+  # 训练增强：7000 → 30000 迭代（GSPose 同规格），密度控制区间等比放宽
+  iterations: 30000
+  densify_end: 30000
+  densify_start: 500
+
+onboard:
+  n_ref_views: 128
