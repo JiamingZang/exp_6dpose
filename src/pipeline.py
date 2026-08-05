@@ -1280,6 +1280,18 @@ class PoseEstimator:
                 R_r, t_r = self._refiner.refine(chosen_ex["crop"],
                                                 chosen_ex["mask_crop"],
                                                 K_crop, R_c, t_c)
+                # 精化回退保护：refiner 损失面 tz 平坦 + 旋转有梯度，常把
+                # 粗位姿推坏（实测负贡献，holepuncher 51.7→36.7）。用渲染
+                # 对齐损失比较精化前后，变差则保留粗位姿。
+                if R_r is not None and self._refiner is not None:
+                    la_before = self._refiner.align_loss(
+                        chosen_ex["crop"], chosen_ex["mask_crop"],
+                        K_crop, R_c, t_c)
+                    la_after = self._refiner.align_loss(
+                        chosen_ex["crop"], chosen_ex["mask_crop"],
+                        K_crop, R_r, t_r)
+                    if la_after > la_before:
+                        R_r, t_r = R_c, t_c
             if R_r is not None:
                 R_out, t_out = self._to_model_frame(R_r, t_r)
             timings["refine"] = time.time() - t0

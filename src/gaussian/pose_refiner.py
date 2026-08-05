@@ -181,8 +181,12 @@ class PoseRefiner:
             loss = (self.lambda_l1 * l1
                     + self.lambda_ssim * (1.0 - ssim_val))
             if self.lpips is not None and self.lambda_lpips > 0:
-                lp = self.lpips(comp[None] * 2 - 1, gt[None] * 2 - 1).mean()
-                loss = loss + self.lambda_lpips * lp
+                # LPIPS 的 vgg 下采样在极小输入上崩（max_pool 输出为 0）：
+                # 小于 32px 时跳过感知项，只留 L1+SSIM
+                if min(comp.shape[1], comp.shape[2]) >= 32:
+                    lp = self.lpips(comp[None] * 2 - 1,
+                                    gt[None] * 2 - 1).mean()
+                    loss = loss + self.lambda_lpips * lp
             dice = (2 * (msk[0] * a).sum()
                     / (msk.sum() + a.sum() + 1e-6))
             loss = loss - self.lambda_dice * dice

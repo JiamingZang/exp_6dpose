@@ -1,0 +1,4 @@
+base: dense80_w1_norefine.yaml
+
+solver:
+  refine_pose: true
