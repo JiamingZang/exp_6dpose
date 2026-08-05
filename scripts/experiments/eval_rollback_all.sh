@@ -19,7 +19,7 @@ printf '%s\n' \
 | xargs -P 4 -I {} bash -c '
   spec="$1"; o="${spec%%:*}"; rest="${spec#*:}"
   m="${rest%%:*}"; c="${rest#*:}"
-  python scripts/run_linemod.py --config "configs/$c.yaml" \
+  python scripts/eval/run_linemod.py --config "configs/current/$c.yaml" \
       --objects "$o" --matches-dir "outputs/$m" --max-frames 120 \
       --cache-dir "outputs/exp_rollback/cache" \
       --out "outputs/exp_rollback/results/$o.json" \

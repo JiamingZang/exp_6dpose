@@ -1,4 +1,4 @@
-base: dense80_dc_b4.yaml
+base: ../archive/dense80_dc_b4.yaml
 
 onboard:
   bg_color: 1.0

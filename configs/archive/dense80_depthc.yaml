@@ -1,0 +1,5 @@
+base: ../current/dense80_depth_bg0.yaml
+
+solver:
+  depth_consistency: true
+  depth_tau_frac: 0.05

@@ -56,7 +56,7 @@ def main():
     from src.config import load_config
     from src.gaussian.template_renderer import render_template_bank
 
-    cfg = load_config("configs/dense80_dc_b4.yaml")
+    cfg = load_config("configs/archive/dense80_dc_b4.yaml")
     ck = torch.load(f"outputs/templates/{args.obj}_3dgs_cad_80t_sa.pt",
                     map_location="cuda", weights_only=False)
     trainer = FakeTrainer(ck)

@@ -1,0 +1,4 @@
+base: ../archive/dense80_batch8.yaml
+
+onboard:
+  bg_color: 0.0

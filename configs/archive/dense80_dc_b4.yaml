@@ -1,4 +1,4 @@
-base: dense80_depthc_guided.yaml
+base: ../current/dense80_depthc_guided.yaml
 
 matching:
   batch_size: 4

@@ -1,0 +1,4 @@
+base: ../current/dense80.yaml
+
+matching:
+  batch_size: 8

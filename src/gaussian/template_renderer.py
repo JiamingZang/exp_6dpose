@@ -60,7 +60,7 @@ def render_template_bank(trainer, cfg_templates: Dict, out_path,
 
     # template_source=depth_map 时同时渲染深度图，供深度反投影 2D-3D 提升
     # （matching.lifting=depth_backproject，历史对照口径，见 VERIFICATION.md §8.1）。
-    # 深度 = 高斯中心相机系 z 的 alpha 混合（与坐标图同一归一化）。
+    # 深度 = 逆深度混合换算回相机系 z（与坐标图同一渲染结果复用）。
     store_depth = cfg_templates.get("template_source",
                                     "coord_map") == "depth_map"
     images, alphas, coord_maps, depth_maps = [], [], [], []
@@ -74,7 +74,7 @@ def render_template_bank(trainer, cfg_templates: Dict, out_path,
             # 背景合成为纯色（DINOv2/MASt3R 输入更干净）
             rgb = rgb + (1.0 - alpha) * bg_color
 
-            # 3D 坐标图：逆深度混合（expected_invdepth，官方
+            # 3D 坐标图：默认逆深度混合（expected_invdepth，官方
             # depth-regularization 同款，见 scripts/maintenance/patch_depth_anchor_maps.py
             # 与 docs/RESEARCH_LOG.md §2-4）。直接 μ 位置混合会被深层高斯
             # 泄漏拉远（中心壳偏内 4-7%，PnP 深度系统性偏浅/偏深），逆深度
@@ -110,15 +110,11 @@ def render_template_bank(trainer, cfg_templates: Dict, out_path,
             coord_maps.append(cm.cpu().numpy().astype(np.float32))
 
             if store_depth:
-                # 相机系 z = (R μ + t)[2]，作为单通道特征 alpha 混合
-                Tt = torch.tensor(T, dtype=torch.float32,
-                                  device=centers.device)
-                z_cam = (centers @ Tt[:3, :3].T + Tt[:3, 3])[:, 2:3]  # (N,1)
-                dm, alpha_d, _ = trainer.render(T, K_render, size, size,
-                                                colors_override=z_cam)
-                dm = dm[..., 0] / torch.clamp(alpha_d[..., 0], min=1e-6)
-                dm[~fg] = 0.0                    # 背景深度置 0（无效）
-                depth_maps.append(dm.cpu().numpy().astype(np.float32))
+                # 深度图与坐标图共用同一逆深度渲染结果换算回相机系 z
+                # （与训练监督同一实现，见 gs_trainer.render_invdepth；此前
+                # 这里另写了一套 z 直接 alpha 混合，会被深层高斯拉远，
+                # 与 coord_map 已修的偏差同源但没跟着修，2026-08-04 统一）
+                depth_maps.append(z_mix.cpu().numpy().astype(np.float32))
 
     bank = {
         "images": np.stack(images),

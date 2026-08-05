@@ -1,0 +1,6 @@
+base: dense80_depthc.yaml
+
+solver:
+  ransac_reproj_px: 3.0
+  refine_pose: false
+  guided_refine: false

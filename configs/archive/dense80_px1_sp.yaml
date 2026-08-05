@@ -1,0 +1,5 @@
+base: ../current/dense80_depthc_guided.yaml
+
+solver:
+  ransac_reproj_px: 1.0
+  subpixel_px: 0.3

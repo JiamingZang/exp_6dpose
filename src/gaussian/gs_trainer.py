@@ -173,6 +173,30 @@ class GaussianTrainer:
         return renders[0], alphas[0], meta
 
     # ------------------------------------------------------------------
+    def render_invdepth(self, viewmat: np.ndarray, K: np.ndarray,
+                        width: int, height: int):
+        """官方逆深度渲染：高斯中心相机系 z 的倒数作为颜色 → α 混合。
+
+        唯一实现，训练深度监督（train() 的 d_loss）与模板 3D 信息渲染
+        （template_renderer.py 的 coord_map/depth_map）都调这里，不允许
+        各自手写——直接 μ/z 位置混合会被深层高斯泄漏拉远（实测 ~4-7%），
+        逆深度混合让近处高斯主导，才与真实表面一致。
+
+        Returns:
+            invdepth (H,W) tensor, alpha (H,W,1) tensor, meta dict
+        """
+        torch = self.torch
+        Rt = torch.tensor(viewmat[:3, :3], dtype=torch.float32,
+                          device=self.device)
+        tt = torch.tensor(viewmat[:3, 3], dtype=torch.float32,
+                          device=self.device)
+        z_cam = (self.splats["means"] @ Rt.T + tt)[:, 2:3]
+        render, alpha, meta = self.render(
+            viewmat, K, width, height,
+            colors_override=(1.0 / z_cam.clamp(min=1e-3)).float())
+        return render[..., 0], alpha, meta
+
+    # ------------------------------------------------------------------
     def train(self, views: List[Dict], log_every: int = 500,
               bg_color: float = 1.0):
         """训练循环。
@@ -232,16 +256,8 @@ class GaussianTrainer:
             # L = (1-λ)·L1 + λ·(1-SSIM)
             loss = (1.0 - lam) * l1 + lam * (1.0 - ssim_val)
             if use_depth:
-                # 高斯中心相机系 z 的倒数作为颜色 → α 混合 = 官方逆深度渲染
-                Rt = torch.tensor(v["viewmat"][:3, :3], dtype=torch.float32,
-                                  device=self.device)
-                tt = torch.tensor(v["viewmat"][:3, 3], dtype=torch.float32,
-                                  device=self.device)
-                z_cam = (self.splats["means"] @ Rt.T + tt)[:, 2:3]
-                inv_render, alpha_d, _ = self.render(
-                    v["viewmat"], v["K"], v["width"], v["height"],
-                    colors_override=(1.0 / z_cam).float())
-                inv_render = inv_render[..., 0]
+                inv_render, alpha_d, _ = self.render_invdepth(
+                    v["viewmat"], v["K"], v["width"], v["height"])
                 msk = d_masks[v_idx]
                 d_loss = ((torch.abs(inv_render - inv_gts[v_idx]) * msk).sum()
                           / msk.sum().clamp(min=1.0))

@@ -1,0 +1,6 @@
+base: ../archive/dense80_depthc.yaml
+
+solver:
+  guided_refine: true
+  guided_iters: 2
+  guided_radius: 12

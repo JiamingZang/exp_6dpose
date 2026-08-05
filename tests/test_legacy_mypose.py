@@ -897,6 +897,15 @@ class _DeltaTrainer:
                 alpha[y, x, 0] = 1.0
         return img, alpha, {}
 
+    def render_invdepth(self, viewmat, K, width, height):
+        torch = self.torch
+        T = torch.tensor(np.asarray(viewmat), dtype=torch.float32)
+        z_cam = (self._centers @ T[:3, :3].T + T[:3, 3])[:, 2:3]
+        render, alpha, meta = self.render(
+            viewmat, K, width, height,
+            colors_override=1.0 / z_cam.clamp(min=1e-3))
+        return render[..., 0], alpha, meta
+
 
 def test_rendered_depth_backprojects_to_gaussian_centers(tmp_path):
     """渲染深度图 → depth_lifting 反投影，必须还原高斯中心（约定闭环）。

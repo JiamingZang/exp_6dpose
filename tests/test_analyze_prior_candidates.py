@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "analyze_prior_candidates.py"
+_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "experiments" / "analyze_prior_candidates.py"
 _spec = importlib.util.spec_from_file_location("apc", _SCRIPT)
 apc = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(apc)

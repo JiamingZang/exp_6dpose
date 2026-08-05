@@ -1,0 +1,212 @@
+# =============================================================================
+# 默认超参配置 —— 《基于3DGS模板匹配与几何后验证的未知物体6D位姿估计》实验。
+# 消融实验通过 configs/ablations/*.yaml 覆盖本文件中的字段。
+# =============================================================================
+
+dataset:
+  name: linemod                # BOP 格式 LineMod（lm_base + lm_models + lm_test_all）
+  root: data/lm                # download_data.sh 解压后的目录
+  # BOP 13 物体协议（不含 bowl=3 / cup=7）
+  objects: [ape, benchvise, cam, can, cat, driller, duck, eggbox, glue,
+            holepuncher, iron, lamp, phone]
+  symmetric_objects: [eggbox, glue]   # ADD-S 评估对象
+  models_dir: models_eval             # 评估用简化模型（BOP 惯例，指标计算用）
+  # 可选官方 train split 目录（PVNet 式逐物体划分，防参考帧泄漏）。存在
+  # <splits_dir>/<obj>_train.txt 时参考帧只取自该列表、评测在其补集上进行；
+  # 缺省 null → 回退到 <root 同级>/splits/lm；两者都无 split 文件时参考帧
+  # 从测试序列均匀抽样并在评测时排除（见 pipeline.evaluate_object）。
+  splits_dir: null
+
+geometry:
+  # 几何初始化。cad = CAD 点云均匀采样（主路线）；vggt = 前馈重建（补充路线）
+  source: cad
+  n_sample_points: 8192        # CAD 网格表面均匀采样点数，作为 3DGS 初始化
+  vggt:
+    n_ref_images: 3            # VGGT 参考图数量（消融取 3/5）
+    checkpoint: facebook/VGGT-1B
+    # 重建系→CAD 系 Umeyama+ICP 对齐（仅评测侧，不参与推理）
+    n_align_points: 2048       # FPS 下采样点数（recon 与 CAD 各取此数做对齐）
+    icp_iterations: 20         # ICP 精化迭代数（0 = 只用包围盒初值不精化）
+
+scale_align:
+  # 物理尺度对齐 s = f_query / f_ref
+  enabled: true
+  # CAD 路线下 f_ref 取 CAD 渲染虚拟焦距；VGGT 路线下由输出视场角换算
+  f_ref: 572.4114              # LineMod 相机 fx，模板渲染使用同一虚拟焦距
+
+gaussian:
+  # 3DGS 训练（gsplat 实现）。学习率/损失权重/密度控制阈值与
+  # 3DGS 官方一致，出处对照 GSPose（同任务基线）与 gsplat：
+  #   GSPose gaussian_object/arguments.py:81-96（position_lr_init 1.6e-4、
+  #   scaling_lr 5e-3、opacity_lr 5e-2、lambda_dssim 0.2、densify_from 500、
+  #   densification_interval 100、densify_grad_threshold 2e-4）
+  #   gsplat examples/simple_trainer.py:295-300（同一组默认 lr）
+  iterations: 7000             # 相比标准 3DGS/GSPose 的 30000 大幅减少（孤立物体，场景简单）
+  lambda_ssim: 0.2             # L = (1-λ)·L1 + λ·(1-SSIM)，λ=0.2
+  lr_means: 1.6e-4             # 位置学习率（代码内再乘 scene_scale，见 gs_trainer）
+  lr_scales: 5.0e-3            # 缩放学习率
+  lr_opacities: 5.0e-2         # 不透明度学习率
+  sh_degree: 3                 # 球谐 3 阶，48 系数
+  densify_start: 500           # 自适应密度控制区间 [500, 5000]，每 100 迭代一次
+  densify_end: 5000            # GSPose 为 15000/30000 迭代，按 7000 迭代等比取 5000
+  densify_interval: 100
+  densify_grad_thresh: 2.0e-4
+
+templates:
+  # 视角采样：8 立方体顶点视角 × 5 平面内旋转（72° 间隔）
+  # = 40 模板（Pos3R 8 顶点 × 5 旋转采样思想）
+  viewpoint_mode: cube8        # cube8 | fibonacci（fibonacci 供模板数消融扩展视角用）
+  n_viewpoints: 8
+  n_inplane: 5                 # 平面内旋转数，间隔 360/5 = 72°
+  image_size: 512              # 模板渲染分辨率 512×512（256 时 3D 锚点量化误差大一倍）
+  radius_scale: 2.5            # 渲染距离 = 物体包围盒对角线 × radius_scale（自适应）
+  fov_deg: 40.0                # 模板虚拟相机视场角（决定 f_ref 与模板内参）
+  # 模板 3D 信息来源：
+  #   coord_map（默认）= 只渲染 3D 坐标图
+  #   depth_map = 额外渲染模板深度图（3DGS alpha 混合 z / pyrender 深度缓冲），
+  #               供 matching.lifting=depth_backproject 的历史对照路线使用
+  #               （见 VERIFICATION.md §8.1）
+  template_source: coord_map   # coord_map | depth_map
+
+detection:
+  # 零样本目标定位与分割
+  segmenter: fastsam           # fastsam（主实验, ultralytics）| sam (ViT-H 消融)
+                               # | gt_mask（分割上界）| gt_bbox（定位上界）
+                               # | yolo（历史对照：YOLO bbox + GT coseg mask，
+                               #   见 VERIFICATION.md §8.2）
+  fastsam_checkpoint: weights/FastSAM-x.pt   # ultralytics FastSAM-x 权重
+  fastsam_conf: 0.4            # 置信度阈值
+  fastsam_iou: 0.9             # NMS IoU 阈值
+  sam_checkpoint: weights/sam_vit_h_4b8939.pth
+  sam_points_per_side: 32
+  sam_pred_iou_thresh: 0.88
+  dinov2_model: dinov2_vitl14  # DINOv2 ViT-L/14，CLS token 1024 维
+  dinov2_input_size: 224
+  bbox_expand: 0.2             # 选中掩码后 bbox 四周扩 20% 裁剪
+  # 定位检索白底中心化（loc_center_white）：候选/模板图都是"白底+前景"，
+  # CLS token 被白底构图分量主导（全部候选分数挤在 0.4-0.6，argmax 被
+  # 背景碎片左右）；查询侧剥白底方向、模板侧剥模板均值后分数分离度
+  # 显著提高（lamp/eggbox/holepuncher 目标掩码排名 #2/#2/#10 → #1）
+  loc_center_white: true
+  # 定位候选消歧（loc_verify）：top1 与 top2 分数差 < gap 或 top1 分
+  # < min_score 时，对 top-K（loc_n_candidates）候选各跑匹配+PnP，用
+  # 3DGS 前向渲染对齐损失选优（错误候选的 crop 里没有目标物体，渲染
+  # 内容对不上）。需要 onboard 的 3DGS 参数 ckpt（.pt）。
+  loc_n_candidates: 3
+  loc_verify: true
+  loc_verify_gap: 0.08
+  loc_verify_min_score: 0.40
+  # 历史对照 YOLO 定位路线（segmenter: yolo 时生效，ultralytics 可选依赖）
+  yolo_checkpoint: weights/yolo_linemod.pt   # 单物体检测权重（自备）
+  yolo_conf: 0.25              # YOLO 置信度阈值
+  # 裁剪方式：
+  #   context_pad（默认）= bbox 扩 20% 直接裁
+  #   tight_square = 历史对照（mask 涂黑背景 + 外接框方形裁剪 +
+  #                  resize 到 crop_size，见 detection/localize.py）
+  crop_mode: context_pad       # context_pad | tight_square
+  crop_size: 512               # tight_square 的输出边长
+  crop_expand: 1.1             # tight_square 的方形边长倍率
+
+matching:
+  # MASt3R 稠密 2D-3D 对应
+  matcher: mast3r              # mast3r | dinov2_patch | loftr（loftr 为 TODO 接口）
+  # 官方唯一 ViT-L 权重名为 *_catmlpdpt_metric（third_party/mast3r/README.md:134-142）
+  mast3r_checkpoint: naver/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric
+  mast3r_local_ckpt: weights/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth
+  image_size: 512              # MASt3R 输入长边 512
+  # Top-K 预筛排序来源：
+  #   dinov2 = 复用定位阶段 DINOv2 相似度排序，只解码 top_k 个模板（K<40 省算）
+  #   mast3r = 全 40 模板解码后按 sim(m) 选 top_k（历史行为，省不了算力）
+  template_ranking: dinov2
+  # 模板预筛开关：
+  #   dinov2（默认）= 维持上面 template_ranking 的预筛语义
+  #   none = 跳过 DINOv2 预筛，对全部模板逐一 MASt3R 匹配（历史对照口径，
+  #          见 VERIFICATION.md §8.3）
+  template_prescreen: dinov2   # dinov2 | none
+  top_k: 40                    # Top-K 候选模板数（40=全模板；只决定候选数）
+  # 2D-3D 提升路线：
+  #   coord_map（默认）= alpha 混合 3D 坐标图查表
+  #   depth_backproject = 模板深度图 K_inv 反投影 + 位姿逆变换（历史对照，
+  #                       见 matching/depth_lifting.py；需 templates.
+  #                       template_source: depth_map 的模板库）
+  lifting: coord_map           # coord_map | depth_backproject
+  depth_max: null              # depth_backproject 的深度上限（单位同模板深度，
+                               # 粗差剔除用；null = 不设上限）
+  sim_threshold: 0.3           # 对应相似度阈值（点积，单位范数特征）
+  cycle_tau_px: 5.0            # cycle consistency 像素容差 τ=5px
+  n_sample_corr: 4096          # 每模板采样对应数 N_s
+  batch_size: 16               # (query, template) 图像对的 GPU 批大小（32GB 卡余量充足）
+  # MASt3R 两视图 3D 几何一致性过滤（官方 fast_nn 的几何验证步）：
+  # desc 最近邻在重复纹理（eggbox 鸡蛋格/glue 圆柱/打孔板）下会找错
+  # 同名点，cycle 一致性对自相似纹理同样失效；用 RANSAC-相似变换按
+  # 3D 残差过滤（阈值 = geom_tau_frac × 模板侧物体半径）
+  geom_filter: false
+  # 备选候选（渲染验证消歧）的模板解码数：备选只做"行不行"判定，
+  # 解码 top-K 个子集即可，全 40 解码是主候选的事（加速大头）
+  alt_topk: 20
+  geom_tau_frac: 0.2
+  geom_iters: 200
+
+solver:
+  # RANSAC-EPnP 几何后验证
+  ransac_reproj_px: 5.0        # 内点重投影阈值 ε=5px
+  ransac_confidence: 0.999
+  ransac_iterations: 1000
+  min_correspondences: 6       # 少于该数量的模板直接跳过（EPnP 最少 4 对，留冗余）
+  refine_lm: true              # 内点集上 Levenberg-Marquardt 精化
+  # 引导式对应精化（guided refinement）：粗位姿把 top1 模板锚点投影到
+  # 查询图，在投影位置 ±r px 局部窗口内重做 desc 最近邻（窗口约束拉回
+  # 重复纹理下的错位对应），新对应重解 PnP 并迭代（窗口逐轮收缩）。
+  # 需要 extract 落盘 top1 模板稠密 desc（自动）。0 = 关闭
+  guided_refine: false
+  guided_iters: 2
+  guided_radius: 12
+  selection: inlier            # 候选择优（判据阶梯，一次求解全部拿到）：
+                               # inlier | inlier_ratio | reproj | similarity | weighted
+  pnp_flag: epnp               # PnP 最小解算法：epnp（默认）
+                               # | sqpnp（历史对照，见 VERIFICATION.md §8.3）
+  joint_templates: 12          # 联合 PnP 精化：sim 分数最高的 K 个模板的
+                               # 对应合并重解（单模板视角对应近平面，
+                               # EPnP 深度/旋转歧义；实测 K=7 最佳）
+  refine_pose: true            # 测试时位姿精化（3DGS 可微渲染 + LPIPS，
+                               # 见 src/gaussian/pose_refiner.py）。开启需要
+                               # onboard 保存 3DGS 参数（.pt）；实测 ADD/Proj
+                               # 均有提升，每帧 +5.5s（评估主配置）
+
+renderer:
+  # 模板渲染器：3dgs（主）| pyrender_cad（消融：直接光栅化 CAD）
+  backend: 3dgs
+
+metrics:
+  add_threshold_ratio: 0.1     # ADD(S)@0.1d
+  proj_threshold_px: 5.0       # Proj@5pix
+  cm_threshold_mm: 50.0        # 5cm（LineMod 单位为 mm）
+  deg_threshold: 5.0           # 5°
+  # 对称物体 ADD-S 的定义：unidirectional（文献标准，默认）
+  # | bidirectional_legacy（双向 Chamfer，非标准，仅为对照历史 eggbox/glue
+  #   数字保留，不可与文献比，见 VERIFICATION.md §8.6）
+  adds_definition: unidirectional
+  # BOP MSSD/MSPD（bop_toolkit 官方口径移植，见 src/metrics/bop_metrics.py）。
+  # 供与 FoundPose 等 BOP 体系方法对比；无 VSD（需深度渲染），报数须注明。
+  bop: true
+  # topK best 评估（历史对照口径，见 VERIFICATION.md §8.4）：
+  # 非空（如 [1, 3, 5]）时对每帧的 K 个候选按 GT 择优（同步选择：取 ADD
+  # 最小候选，proj 用同一候选），输出候选集上界。[] = 关闭（默认）
+  topk_best: []
+
+onboard:
+  # 离线准备阶段：3DGS 训练监督图。
+  # LineMod 协议下参考数据来自训练序列；此处从场景帧中
+  # 均匀抽 n_ref_views 帧，用 GT 位姿 + 可见掩码把背景置白后作为训练视图
+  n_ref_views: 64
+  bg_color: 1.0                # 训练视图与模板渲染统一的背景色（白）
+  # 训练视图按 GT 掩码外接框扩 20% 裁剪放大到 train_crop，K 同步缩放：
+  # 物体在 640×480 原图只占 ~1-2% 像素，全图监督信号太弱，训练不学习；
+  # 裁剪后表面细节显著变细（3D 锚点精度直接决定 PnP 位姿精度）
+  train_crop: 512
+
+runtime:
+  device: cuda                 # GPU 机器上 cuda；本地单测不触碰该字段
+  seed: 0
+  output_dir: outputs
+  template_dir: outputs/templates   # onboard 产物（模板库 npz）存放处
