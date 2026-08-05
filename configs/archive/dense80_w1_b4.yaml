@@ -1,0 +1,4 @@
+base: ../current/dense80_w1_norefine.yaml
+
+matching:
+  batch_size: 4

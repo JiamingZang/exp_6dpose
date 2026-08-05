@@ -1,0 +1,4 @@
+base: ../current/dense80_depthc_guided.yaml
+
+solver:
+  refine_supersample: 2
