@@ -1,19 +1,19 @@
 # STATE.md —— 唯一状态源（agent 进来先读这个）
 
 > 更新规则：每轮实验出结果**同一次操作内**更新本文件。
-> 上次更新：2026-08-04（整理自 docs/EXPERIMENTS.md 轮 9 记录）
+> 上次更新：2026-08-05（回退保护冠军 71.55；全量提取在跑）
 
 ## 冠军（论文主表数字）
 
 | 项 | 值 |
 |---|---|
 | 数据 | LineMod 13 物体 × 120 帧均匀采样（子集，全量待跑）|
-| **MEAN** | **ADD 69.36 / Proj 81.67 / 5cm5° 66.99**（轮 9：depth_consistency + guided_refine）|
+| **MEAN** | **ADD 71.55 / Proj — / 5cm5° —**（回退保护：refiner 精化前后渲染对齐损失择优，子集 120 帧/物体）|
 | 基线对照 | 无 dc2：67.44 / 81.54 / 66.54；旧代码 MyPose top1：49.49 / 59.22（端到端可比）|
-| 配置 | `configs/current/dense80_depthc_guided.yaml`（depth_consistency + tau_frac 0.05 + guided 2 轮）|
+| 配置 | `configs/current/dense80_depthc_guided.yaml` + 回退保护（refine 变差回退粗位姿）；can 92.5 追平 GSPose 单项 |
 | 模板库 | dense80（fibonacci 16 视角 × 5 平面内旋转，512×512），固定视图 + 逆深度锚点 |
 | 训练背景 | 按物体亮度：浅色黑背景（depth 0.6）、深色白背景（driller/cam）|
-| 外部目标 | GSPose 92.0，差 22.6，缺口集中在 holepuncher/duck/ape（31-38）|
+| 外部目标 | GSPose 92.0，差 20.5，缺口集中在 duck/ape/cat（33-47）|
 | 结果 | `matches13_dc2` 提取 + `scripts/eval/summarize13.py` 汇总 |
 
 ## 在跑 / 待办
