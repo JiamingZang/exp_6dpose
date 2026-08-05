@@ -57,7 +57,7 @@ class GaussianTrainer:
     Args:
         points: (N,3) 尺度对齐后的初始化点云 P_aligned
         colors: (N,3) [0,1] 初始颜色（CAD 顶点色；无色时置 0.5 灰）
-        cfg:    configs/default.yaml 的 gaussian 段
+        cfg:    configs/current/default.yaml 的 gaussian 段
     """
 
     def __init__(self, points: np.ndarray, colors: Optional[np.ndarray],

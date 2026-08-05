@@ -31,7 +31,7 @@
 
 本模块同时提供：
 - 本库帧级结果 → 历史格式（评估导出，run_linemod.py --aggregated-out）
-- 历史格式 → 本库报告格式（scripts/import_prior_metrics.py）
+- 历史格式 → 本库报告格式（scripts/experiments/import_prior_metrics.py）
 - topK best 同步选择与聚合（evaluate_object 的 metrics.topk_best）
 """
 from __future__ import annotations
@@ -229,7 +229,7 @@ def aggregate_all_objects(per_object: Dict[str, Dict],
 
 
 # ---------------------------------------------------------------------------
-# 历史格式 → 本库评估报告格式（scripts/import_prior_metrics.py 用）
+# 历史格式 → 本库评估报告格式（scripts/experiments/import_prior_metrics.py 用）
 # ---------------------------------------------------------------------------
 def non_oracle_reference(topk_agg: Optional[Dict]) -> Optional[Dict]:
     """从历史 top1/3/5 JSON 里取出**唯一的非 oracle 数字**（top1 档）。

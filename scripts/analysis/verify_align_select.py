@@ -1,10 +1,10 @@
-"""验证 align_loss vs mask_iou 对 can 爆炸帧的区分度。
+"""验证 align_loss vs mask_iou 对 can 30k+invdepth 锚点坏帧的区分度。
 
-can invdepth 锚点下 23 帧 ok→bad：RANSAC 择优选到 tz 爆炸假设
-（trans~285mm），mask IoU 判据漏检（tz 缩放掩码 IoU 仍高）。
-验证 align_loss（L1+SSIM）能否区分 best（爆炸）与 GT 位姿。
+exp_30k13 缓存下 can 坏帧（add_01d==0）：RANSAC 择优选到 tz 爆炸假设，
+mask IoU 判据漏检（tz 缩放掩码 IoU 仍高）。验证 align_loss（L1+SSIM）
+能否区分 best（爆炸）与 GT 位姿。
 
-用法: python scripts/verify_align_select.py --obj can
+用法: python scripts/analysis/verify_align_select.py --obj can
 """
 import argparse
 import json
@@ -13,7 +13,13 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+def _repo_root() -> Path:
+    for root in Path(__file__).resolve().parents:
+        if (root / "src").is_dir() and (root / "configs").is_dir():
+            return root
+    raise RuntimeError("Cannot locate repository root")
+
+sys.path.insert(0, str(_repo_root()))
 
 
 def main():

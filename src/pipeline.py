@@ -61,7 +61,7 @@ class TemplateBank:
             warnings.warn(
                 f"模板库锚点渲染方式为 {self.anchor_mode!r}（期望 invdepth）："
                 f"μ 位置混合锚点深度系统性偏大 ~1.7%，会污染 PnP 深度。"
-                f"请运行 scripts/patch_depth_anchor_maps.py 后重评估。"
+                f"请运行 scripts/maintenance/patch_depth_anchor_maps.py 后重评估。"
                 f"（{npz_path}）", stacklevel=2)
         self.poses = d["poses"]              # (M,4,4) w2c
         self.K = d["K"]
@@ -70,13 +70,13 @@ class TemplateBank:
                 f"模板库缺 scale（尺度对齐因子）: {npz_path}。这通常是 "
                 f"onboard 在模板渲染落盘之后、DINOv2 特征之前中断留下的残留"
                 f"文件——静默按 1.0 用会让平移量级系统性错误。请删除该文件并"
-                f"重新运行 scripts/onboard_object.py。")
+                f"重新运行 scripts/data/onboard_object.py。")
         self.scale = float(d["scale"])
         if "dino_feats" not in d:
             raise ValueError(
                 f"模板库缺 dino_feats（DINOv2 模板 CLS 特征）: {npz_path}。"
                 f"同上，属 onboard 未跑完的残留文件；请删除后重新运行 "
-                f"scripts/onboard_object.py。")
+                f"scripts/data/onboard_object.py。")
         self.dino_feats = d["dino_feats"]
         # 模板渲染背景色（0=黑, 1=白）。缺失（旧库）时 None，extract 侧
         # 无法校验，只能信配置；新库强制写入，见 onboard_object。
@@ -94,7 +94,7 @@ class TemplateBank:
                     f"depth_maps{tuple(self.depth_maps.shape)} vs "
                     f"images{tuple(self.images.shape)}（前三维 (M,S,S) 必须相同）。"
                     f"多半是深度库与坐标图库混用或渲染分辨率改过，"
-                    f"请重新运行 scripts/onboard_object.py。")
+                    f"请重新运行 scripts/data/onboard_object.py。")
         # VGGT 路线的重建系→CAD 系相似变换（仅评测侧对齐用）。
         # CAD 路线下无此变换，默认恒等。
         self.has_align = "align_R" in d
@@ -517,7 +517,7 @@ class PoseEstimator:
             raise ValueError(
                 "matching.lifting=depth_backproject 需要模板深度图，但模板库"
                 "缺 depth_maps。请在 configs 里设 templates.template_source: "
-                "depth_map 并重新运行 scripts/onboard_object.py。")
+                "depth_map 并重新运行 scripts/data/onboard_object.py。")
 
         # Top-K 预筛排序来源。dinov2=复用定位相似度只解码 K 个；
         # mast3r=全解码后按 sim(m) 选 Top-K
@@ -602,7 +602,7 @@ class PoseEstimator:
                         gt_bbox=None, gt_mask=None):
         """阶段 2（粗匹配）：定位 → 裁剪 → MASt3R Top-K 稠密对应。
 
-        与 estimate() 的求解段解耦：对应产物可落盘（scripts/extract_matches.py
+        与 estimate() 的求解段解耦：对应产物可落盘（scripts/analysis/extract_matches.py
         的逐帧 npz），调 PnP/择优参数时无需重跑最贵的 MASt3R 阶段。
 
         Returns:
@@ -1125,7 +1125,7 @@ class PoseEstimator:
         # render_align_select：每帧直接对 [best + ranked top-K] 算渲染
         # 对齐损失（L1+SSIM，内容错位敏感）选最小——tz 爆炸位姿渲染与
         # 真实图完全错位，损失显著高于正确位姿（区分度实测见
-        # scripts/verify_align_select.py）。每候选 ~30ms 前向渲染。
+        # scripts/analysis/verify_align_select.py）。每候选 ~30ms 前向渲染。
         if (bool(s_cfg.get("render_align_select", False))
                 and self._verifier is not None):
             t0 = time.time()
@@ -1528,7 +1528,7 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
     跳过已完成帧——全量 1172 帧/物体约 6 小时，必须支持断点续跑。
 
     matches_dir 给定时跳过 MASt3R 阶段（阶段 2 产物已由
-    scripts/extract_matches.py 落盘），直接求解+聚合——调 PnP/择优参数
+    scripts/analysis/extract_matches.py 落盘），直接求解+聚合——调 PnP/择优参数
     无需重跑最贵的匹配阶段。
 
     Returns:

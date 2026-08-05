@@ -1,7 +1,0 @@
-base: dense80.yaml
-
-gaussian:
-  depth_l1_weight: 0.6
-
-onboard:
-  bg_color: 0.0

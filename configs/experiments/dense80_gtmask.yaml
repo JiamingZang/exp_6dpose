@@ -1,4 +1,4 @@
-base: dense80.yaml
+base: ../current/dense80.yaml
 
 detection:
   segmenter: gt_mask

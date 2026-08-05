@@ -1,8 +1,0 @@
-base: dense80_depth_bg0.yaml
-
-solver:
-  multi_hypo: true
-  multi_hypo_seeds: 6
-  multi_hypo_iou: 0.3
-  ransac_reproj_px: 3.0
-  ransac_iterations: 3000

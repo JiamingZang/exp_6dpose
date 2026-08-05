@@ -1,5 +1,0 @@
-base: dense80_depthc.yaml
-
-solver:
-  refine_pose: false
-  guided_refine: false

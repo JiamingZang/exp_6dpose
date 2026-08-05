@@ -1,5 +1,5 @@
 # 分解实验：dense80 + 排序修复（不设 RANSAC 上限）
-base: default.yaml
+base: ../current/default.yaml
 
 templates:
   viewpoint_mode: fibonacci

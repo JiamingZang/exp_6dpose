@@ -52,7 +52,7 @@
   无切向收缩问题。
 - 重训后 onboard 重采样模板视图（渲染距离 365.3 vs 363.4，差 0.5%）→
   matches 的 pix_t 与新模板错位 → **模板视图必须固定**（复用旧 poses）。
-- `scripts/rebuild_bank_fixed_views.py`：旧视图 + 新高斯 + 逆深度锚点 +
+- `scripts/data/rebuild_bank_fixed_views.py`：旧视图 + 新高斯 + 逆深度锚点 +
   重算 dino_feats。
 - ape 全量 1172 帧：**ADD 44.20% / Proj 88.91% / 5cm5° 57.00%**，
   tz 中位 0.9983（CAD 锚点基线 40.96% 被超越）。
@@ -97,7 +97,7 @@ GSPose 官方对照：训练 `image * mask`（黑背景），`white_background=F
 渲染背景 [0,0,0]，损失 `trunc_FG_mask` 前景截断。本库此前白背景偏离官方，
 且 SSIM 全图统计会稀释物体区域约束。
 
-修复：`configs/dense80_depth_bg0.yaml`（黑背景 + `depth_l1_weight: 0.6`）
+修复：`configs/current/dense80_depth_bg0.yaml`（黑背景 + `depth_l1_weight: 0.6`）
 → eggbox **9.2% → 98.3%**（同 120 帧，Proj 94.2% / 5cm5° 80.0%）。
 
 ## 7. 对称感知 PnP（实现但非 eggbox 主因）
@@ -111,13 +111,13 @@ GSPose 官方对照：训练 `image * mask`（黑背景），`white_background=F
 
 ## 8. 第二轮：全物体黑背景重训（08-02 完成）
 
-`scripts/rerun13_bg0.sh`：11 物体（eggbox 已重训）黑背景 + depth 0.6
+`scripts/maintenance/rerun13_bg0.sh`：11 物体（eggbox 已重训）黑背景 + depth 0.6
 重训 → 重提取 120 帧 → 评估。**MEAN ADD 49.1% → 63.3%**，
 eggbox 9.2 → 98.3、lamp 25.8 → 89.2、can 44.2 → 84.2。
 
 但**深色物体崩了**：driller 94.2 → 61.7、cam 53.3 → 33.3
 （黑背景 + 深色物体 = 白背景 + 浅色物体的同一问题）。
-白背景重训（`configs/dense80_depth_w1.yaml`）恢复并超过首轮：
+白背景重训（`configs/current/dense80_depth_w1.yaml`）恢复并超过首轮：
 driller 95.0 / cam 55.8。
 
 ## 9. 最终 13 物体（按亮度选背景）
@@ -160,11 +160,11 @@ driller 95.0 / cam 55.8。
 3. 修复（机制层）：bank npz 写入 `bg_color` 字段（onboard +
    rebuild_bank_fixed_views）；TemplateBank 读取；
    extract_matches 校验 bank.bg_color ≠ cfg 时直接报错。
-   新配置 `configs/dense80_batch8_bg0.yaml`（bg_color 显式 0.0）。
+   新配置 `configs/current/dense80_batch8_bg0.yaml`（bg_color 显式 0.0）。
 4. 教训：任何"训练背景/模板背景/裁剪填充背景"三处一致性都应在
    产物中记录并在下游校验，不能靠配置默认值传递。
 
-### D 类锚点诊断（scripts/diag_dclass.py，CPU）
+### D 类锚点诊断（scripts/analysis/diag_dclass.py，CPU）
 - **coord_map 即物体系 3D 点，PnP 直接查表（pipeline.py:706），
   不需要再乘模板位姿**——诊断最初多乘了一次模板位姿变换，
   得到 -26% 假偏差；修正后：

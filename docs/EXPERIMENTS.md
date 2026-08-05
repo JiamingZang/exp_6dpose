@@ -63,7 +63,7 @@ CAD 网格 numpy z-buffer 光栅化（无 GL）→ 参考帧 GT 位姿逆深度�
 - 逆深度锚点 = 训练监督的同一渲染 → z/xy 同时正确（射线 × 表面深度）。
 - 重训后 onboard 重采样模板视图（渲染距离 365.3 vs 363.4）→ 与阶段 2 的
   像素对应错位 0.5% → **模板视图必须固定**（复用旧 poses）。
-- `scripts/rebuild_bank_fixed_views.py`：旧视图 + 新高斯 + 逆深度锚点。
+- `scripts/data/rebuild_bank_fixed_views.py`：旧视图 + 新高斯 + 逆深度锚点。
 
 ape 全量 1172 帧：
 
@@ -77,7 +77,7 @@ ape 全量 1172 帧：
 ### 轮 5：13 物体首轮子集（白背景，08-02 凌晨）
 
 12 物体 DS 重训（白背景 depth 0.3）+ 固定视图重建 + 全链自动跑
-（`scripts/run13_subset_chain.sh`）：
+（`scripts/experiments/run13_subset_chain.sh`）：
 
 **MEAN（13×120 帧）：ADD 49.10% / Proj 65.13% / 5cm5° 47.69%**
 
@@ -98,7 +98,7 @@ eggbox **9.2% → 98.3%**（Proj 94.2% / 5cm5° 80.0%）。
 
 ### 轮 7：全物体黑背景（08-02）
 
-11 物体黑背景 + depth 0.6 重训重提取（`scripts/rerun13_bg0.sh`）：
+11 物体黑背景 + depth 0.6 重训重提取（`scripts/maintenance/rerun13_bg0.sh`）：
 
 **MEAN：ADD 63.33% / Proj 76.28% / 5cm5° 59.49%**（+14.2/+11.2/+11.8）
 
@@ -109,7 +109,7 @@ eggbox **9.2% → 98.3%**（Proj 94.2% / 5cm5° 80.0%）。
 
 ### 轮 8：深色物体白背景（08-02，最终）
 
-driller/cam 白背景重训（`configs/dense80_depth_w1.yaml`）：
+driller/cam 白背景重训（`configs/current/dense80_depth_w1.yaml`）：
 
 | 物体 | 首轮(白) | 黑背景 | 白背景重训 |
 |---|---|---|---|
@@ -158,7 +158,7 @@ driller/cam 白背景重训（`configs/dense80_depth_w1.yaml`）：
 
 ### guided_refine 测试（GSPose 式迭代引导匹配，D 类物体）
 
-`configs/dense80_guided.yaml`（guided_refine: true, guided_iters: 2, guided_radius: 12，
+`configs/archive/dense80_guided.yaml`（guided_refine: true, guided_iters: 2, guided_radius: 12，
 baseline 为 3 节主表，即 dense80_depth 系列）：
 
 | 物体 | ADD 基线→guided | Proj 基线→guided | 5cm5° 基线→guided |
@@ -213,12 +213,12 @@ baseline 为 3 节主表，即 dense80_depth 系列）：
 
 | 文件 | 用途 |
 |---|---|
-| `configs/dense80_depth_bg0.yaml` | 黑背景 + depth 0.6（浅色物体） |
-| `configs/dense80_depth_w1.yaml` | 白背景 + depth 0.6（深色物体） |
-| `scripts/rebuild_bank_fixed_views.py` | 固定视图重建（旧 poses + 新高斯 + 逆深度锚点） |
-| `scripts/patch_depth_anchor_maps.py` | 逆深度锚点渲染 |
-| `scripts/rerun13_bg0.sh` | 12 物体黑背景全链（重训→提取→评估） |
-| `scripts/summarize13.py` | 13 物体汇总表 |
+| `configs/current/dense80_depth_bg0.yaml` | 黑背景 + depth 0.6（浅色物体） |
+| `configs/current/dense80_depth_w1.yaml` | 白背景 + depth 0.6（深色物体） |
+| `scripts/data/rebuild_bank_fixed_views.py` | 固定视图重建（旧 poses + 新高斯 + 逆深度锚点） |
+| `scripts/maintenance/patch_depth_anchor_maps.py` | 逆深度锚点渲染 |
+| `scripts/maintenance/rerun13_bg0.sh` | 12 物体黑背景全链（重训→提取→评估） |
+| `scripts/eval/summarize13.py` | 13 物体汇总表 |
 | `src/geometry/cad_depth.py` | CAD z-buffer 光栅化（训练监督深度图） |
 | `src/solver/ransac_pnp.py` | 对称感知 RANSAC（sym_transforms） |
 | `src/detection/localize.py` | 批量 CLS 定位 + 背景填色一致 |

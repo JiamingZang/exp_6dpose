@@ -1,6 +1,0 @@
-base: dense80.yaml
-
-solver:
-  guided_refine: true
-  guided_iters: 2
-  guided_radius: 12

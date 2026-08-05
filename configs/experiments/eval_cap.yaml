@@ -1,5 +1,5 @@
 # 阶段 3 效率验证：RANSAC 只跑分数最高 12 个模板（验证上限不影响精度）
-base: default.yaml
+base: ../current/default.yaml
 
 solver:
   ransac_top_templates: 12

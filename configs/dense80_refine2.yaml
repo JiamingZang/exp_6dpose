@@ -1,8 +1,0 @@
-base: dense80_depthc_guided.yaml
-
-solver:
-  # refiner v2：超采样渲染（2x）+ 阶段1纯平移 + 面积对数正则（Dice 门控）
-  refine_supersample: 2
-  refine_stage1_iters: 60
-  refine_area_lambda: 2.0
-  refine_area_gate_dice: 0.6

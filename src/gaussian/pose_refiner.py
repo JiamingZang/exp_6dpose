@@ -13,7 +13,7 @@ import torch
 
 _HINT = (
     "位姿精化需要 onboard 保存的 3DGS 参数（<模板库>.pt）。当前库没有，"
-    "请重新运行 scripts/onboard_object.py。"
+    "请重新运行 scripts/data/onboard_object.py。"
 )
 
 

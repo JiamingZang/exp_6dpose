@@ -1,4 +1,0 @@
-base: dense80_depth_bg0.yaml
-
-gaussian:
-  depth_l1_weight: 0.3

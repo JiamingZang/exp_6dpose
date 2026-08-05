@@ -1,8 +1,0 @@
-base: dense80_depthc_guided.yaml
-
-solver:
-  tz_search: false  # 已验证：无遮挡物体有效(+10.8 holepuncher)，遮挡物体破坏，判据不可分，默认关
-  tz_search_lo: 0.88
-  tz_search_hi: 1.12
-  tz_search_n: 13
-  tz_search_gain: 0.02

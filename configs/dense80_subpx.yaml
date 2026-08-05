@@ -1,4 +1,0 @@
-base: dense80_depthc_guided.yaml
-
-solver:
-  subpixel_px: 0.3

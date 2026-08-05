@@ -1,6 +1,6 @@
 """YAML 配置加载与消融覆盖工具。
 
-configs/default.yaml 是唯一的超参来源；消融 yaml 只声明 sweep 字段与取值，
+configs/current/default.yaml 是唯一的超参来源；消融 yaml 只声明 sweep 字段与取值，
 由 apply_override 按点号路径写回配置副本。
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ def _deep_merge(base: Dict[str, Any], overlay: Dict[str, Any],
     return out
 
 
-def load_config(path: str = "configs/default.yaml",
+def load_config(path: str = "configs/current/default.yaml",
                 _chain: tuple = ()) -> Dict[str, Any]:
     """加载配置。支持 `base: <相对路径>` 覆盖式继承：
 
@@ -50,8 +50,8 @@ def load_config(path: str = "configs/default.yaml",
     `_chain` 是内部参数（已展开的 base 链，绝对路径）：base 成环时原本是
     一句无信息量的 RecursionError，这里改成带完整链条的 ValueError。
     """
-    p = Path(path)
-    resolved = p.resolve()
+    p = Path(path).resolve()
+    resolved = p
     if resolved in _chain:
         loop = " → ".join(str(x) for x in (*_chain, resolved))
         raise ValueError(f"配置 base 链存在循环引用: {loop}")

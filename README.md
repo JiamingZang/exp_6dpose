@@ -37,9 +37,12 @@
 
 ```
 exp_6dpose/
-├── configs/default.yaml       # 全部超参（与论文 3.1.3 一一对应）
-├── configs/legacy_mypose.yaml # 一份配置完整复现旧代码 MyPose 管线（见 §8）
-├── configs/ablations/         # 10 组消融（论文 4.3.1–4.3.9），每组一个 yaml
+├── configs/
+│   ├── current/               # 当前主线/复现入口：default、dense80_depthc_guided、legacy_mypose 等
+│   ├── archive/               # 历史验证/失败路线/只为追溯保留的 dense80_* 配置
+│   ├── ablations/             # 10 组消融（论文 4.3.1–4.3.9），每组一个 yaml
+│   ├── experiments/           # 一次性实验配置归档（topk/背景/gtmask 变体）
+│   └── *.yaml                 # 不保留根目录兼容入口；新实验必须显式选择 current/archive
 ├── src/
 │   ├── geometry/              # 视角采样(2.3.2)、尺度对齐(2.2.3)、位姿/投影工具
 │   ├── gaussian/              # 3DGS 训练(2.3.1)、模板+3D坐标图/深度图渲染(2.3.3) [GPU]
@@ -50,23 +53,20 @@ exp_6dpose/
 │   ├── metrics/               # ADD/ADD-S/Proj@5pix/5cm5°(3.1.2)、旧格式对接(§8)
 │   └── pipeline.py            # onboard_object + PoseEstimator + evaluate_object
 ├── scripts/
-│   ├── onboard_object.py      # 离线：3DGS 深度监督训练 + 80 模板库
-│   ├── extract_matches.py     # 阶段 2：定位 + MASt3R 稠密对应落盘
-│   ├── run_linemod.py         # 阶段 3：PnP 求解 + 评测（13 物体）
-│   ├── rebuild_bank_fixed_views.py  # 固定模板视图重建（逆深度锚点）
-│   ├── patch_depth_anchor_maps.py   # 逆深度锚点渲染
-│   ├── run_speed.py           # 分阶段计时（论文 3.4）
-│   ├── summarize13.py         # 13 物体汇总表
-│   ├── rerun13_bg0.sh         # 全物体黑背景重训链（实验记录用）
-│   ├── run_ablation.py        # 消融：--ablation <yaml> 或 --all
-│   └── download_data.sh       # LineMod (BOP: lm_base+lm_models+lm_test_all)
-├── configs/experiments/       # 一次性实验配置归档（topk/背景/gtmask 变体）
-├── scripts/experiments/       # 一次性实验脚本归档（链脚本/诊断脚本）
+│   ├── data/                  # 数据下载、3DGS onboard、固定视图模板重建
+│   ├── eval/                  # LineMod 评测、速度、13 物体汇总、消融批跑
+│   ├── analysis/              # 匹配提取、D 类诊断、深度/对齐/GT mask 验证
+│   ├── maintenance/           # 一次性补丁和历史重跑链脚本
+│   ├── experiments/           # 一次性实验脚本归档
+│   └── *.py/*.sh              # 兼容 wrapper：旧命令 `python scripts/eval/run_linemod.py` 仍可用
+├── docs/STRUCTURE_AUDIT.md    # 本次结构问题清单与整理依据
 ├── setup_gpu.sh               # GPU 机器一键部署（依赖+MASt3R克隆+权重下载）
 ├── requirements.txt           # GPU 完整依赖
 ├── requirements-local.txt     # 本地 CPU 测试依赖
 └── tests/                     # 157 个 pytest 单测，本地（macOS，无CUDA）全绿
 ```
+
+新实验优先写 `configs/current/...` 与 `scripts/<类别>/...`；历史实验日志可能保留旧路径；实际运行以本节和 AGENTS.md 的分类路径为准。
 
 **GPU/CPU 边界**：`src/gaussian`、`src/detection`、`src/matching/mast3r_wrapper`、
 `src/datasets/vggt_recon` 只能在 Linux GPU 机器运行；本地导入不报错，
@@ -98,31 +98,31 @@ bash setup_gpu.sh            # 装依赖 + 克隆 mast3r + 下载 MASt3R/SAM 权
 source env.sh                # 每个新 shell 都要（设置 mast3r PYTHONPATH）
 
 # 1. 数据（约 6GB，10-30 分钟视网速）
-bash scripts/download_data.sh data
-# 确认 configs/default.yaml: dataset.root 指向 data/lm
+bash scripts/data/download_data.sh data
+# 确认 configs/current/default.yaml: dataset.root 指向 data/lm
 
 # 2. 离线 onboard：13 物体（每物体 3DGS 7000 迭代约 4-6 分钟，共约 1-1.5 小时）
-python scripts/onboard_object.py
+python scripts/data/onboard_object.py
 
 # 3. 主实验：LineMod 13 物体全量评测（论文 3.2 表 1）
 #    每帧约 0.6-1.2s（SAM 自动掩码为主要开销），13 物体 ×~1000 帧 ≈ 3-5 小时
-python scripts/run_linemod.py
+python scripts/eval/run_linemod.py
 #    → outputs/linemod_main.json：每物体与均值的 ADD(S)@0.1d / Proj@5pix / 5cm5°
 
 # 4. 速度表（论文 3.4）
-python scripts/run_speed.py --object ape --n-frames 100
+python scripts/eval/run_speed.py --object ape --n-frames 100
 
 # 5. 消融（论文 3.3，8 组）。注意 02/05/06/08 需重建模板库（脚本自动 onboard）
-python scripts/run_ablation.py --ablation configs/ablations/01_topk.yaml
-python scripts/run_ablation.py --all          # 全部 8 组（约 1-2 天，可拆分并行）
+python scripts/eval/run_ablation.py --ablation configs/ablations/01_topk.yaml
+python scripts/eval/run_ablation.py --all          # 全部 8 组（约 1-2 天，可拆分并行）
 #    → outputs/ablation_<name>.json
 ```
 
 冒烟验证（跑通即环境正确，约 10 分钟）：
 
 ```bash
-python scripts/onboard_object.py --objects ape
-python scripts/run_linemod.py --objects ape --max-frames 50
+python scripts/data/onboard_object.py --objects ape
+python scripts/eval/run_linemod.py --objects ape --max-frames 50
 ```
 
 ### 预计时长与显存汇总
@@ -134,7 +134,7 @@ python scripts/run_linemod.py --objects ape --max-frames 50
 | 13 物体主表 | 3–5 h | ~12GB |
 | 8 组消融全量 | 1–2 天 | 同上 |
 
-### 常用开关（configs/default.yaml）
+### 常用开关（configs/current/default.yaml）
 
 - `detection.segmenter` —— `fastsam`（主实验，需 `pip install ultralytics`）| `sam`（ViT-H 消融）| `gt_mask`（分割上界）| `gt_bbox`（定位上界）。未知值直接 raise，不静默回退
 - `matching.top_k` —— Top-K 候选模板数（默认 40=全部模板，即不裁候选；该项只决定候选数，与旧代码的 oracle 数字无关）
@@ -148,7 +148,7 @@ python scripts/run_linemod.py --objects ape --max-frames 50
 - `templates.template_source` —— `coord_map`（默认）| `depth_map`（额外渲染模板深度图，需重新 onboard；模板库文件名带 `_depth` 后缀不会覆盖坐标图库）
 - `matching.lifting` —— `coord_map`（默认，alpha 混合坐标图查表）| `depth_backproject`（模板深度 `K_inv` 反投影 + 位姿逆变换，旧管线）
 - `matching.template_prescreen` —— `dinov2`（默认）| `none`（跳过 DINOv2 预筛，全模板逐一 MASt3R 匹配 = 旧管线）。注意 `none` 与 `template_ranking: dinov2` 组合无意义（预筛被跳过，ranking 无从生效），配置期直接 raise
-- `detection.segmenter: yolo` —— YOLO bbox + GT coseg mask 定位（需 `pip install ultralytics` + `detection.yolo_checkpoint`）。**这是独立消融项，不在 legacy 配置里**：旧代码虽然加载了 YOLO 检测，但主循环裁剪全程用 GT mask，YOLO 框从未参与计算（见 `configs/legacy_mypose.yaml` 注释）
+- `detection.segmenter: yolo` —— YOLO bbox + GT coseg mask 定位（需 `pip install ultralytics` + `detection.yolo_checkpoint`）。**这是独立消融项，不在 legacy 配置里**：旧代码虽然加载了 YOLO 检测，但主循环裁剪全程用 GT mask，YOLO 框从未参与计算（见 `configs/current/legacy_mypose.yaml` 注释）
 - `detection.crop_mode` —— `context_pad`（默认，bbox 扩 20%）| `tight_square`（mask 涂黑 + 外接框 `crop_expand`=1.1 倍方形 + resize `crop_size`=512，旧管线）
 - `solver.pnp_flag` —— `epnp`（默认）| `sqpnp`（旧管线）
 - `solver.selection` —— `inlier`（默认，几何一致性择优）| `similarity`（旧代码的候选窗口顺序：按 MASt3R 模板相似度降序）| `weighted`
@@ -160,8 +160,8 @@ python scripts/run_linemod.py --objects ape --max-frames 50
 # 一份配置复现旧管线的设计选择（GT mask 定位 + 512 方形裁剪 + 深度反投影 +
 # 无 DINOv2 预筛 + top_k 40 + SQPNP + 相似度候选序）。
 # 注意需要深度图模板库，先重新 onboard：
-python scripts/onboard_object.py --config configs/legacy_mypose.yaml
-python scripts/run_linemod.py --config configs/legacy_mypose.yaml \
+python scripts/data/onboard_object.py --config configs/current/legacy_mypose.yaml
+python scripts/eval/run_linemod.py --config configs/current/legacy_mypose.yaml \
     --aggregated-out outputs/legacy_aggregated.json
 #   → outputs/legacy_aggregated.json：旧 aggregated_metrics 兼容格式，但内容是
 #     **端到端**数字（内点择优的最终预测），只能与旧 `top1` = 49.49% 比。
@@ -170,7 +170,7 @@ python scripts/run_linemod.py --config configs/legacy_mypose.yaml \
 #     同口径可比的是这里的 `top40_best`（同为 GT 择优 oracle 上界）。
 
 # 把旧代码的真实实验结果导入新库产物目录（论文表格直接从这里取数）
-python scripts/import_prior_metrics.py
+python scripts/experiments/import_prior_metrics.py
 #   → results/prior/aggregated_metrics_all_objects40_report.json：
 #     旧 Top-40 **GT 择优上界** ADD 82.73% / Proj 81.99%（13407 样本，oracle，
 #     非端到端）；文件里带 protocol=prior_MyPose_oracle_top40、
@@ -190,7 +190,7 @@ python scripts/import_prior_metrics.py
 `metrics.topk_best` 复现的是旧 top1/3/5 的**窗口语义**（相似度序 + 失败候选占
 名额 + 同步选择），不是旧数值：模板打分函数不同（旧 `:362` 是互最近邻配对点积
 **求和**，本库 `sim(m) = mean_y max_{y'} S`），另有若干口径差异逐条列在
-`configs/legacy_mypose.yaml` 的"已知非复现项"。
+`configs/current/legacy_mypose.yaml` 的"已知非复现项"。
 
 逐项移植清单、旧代码 file:line 出处、对应测试名见
 [`VERIFICATION.md`](VERIFICATION.md) §8。

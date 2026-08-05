@@ -1,4 +1,4 @@
-"""scripts/analyze_prior_candidates.py 的合成数据回归。
+"""scripts/experiments/analyze_prior_candidates.py 的合成数据回归。
 
 不依赖服务器上的真实 top40 JSON：构造一份字段结构与旧
 `inference_on_LM.py:556-578` 完全一致的小样本，验证五张表的算法正确性，

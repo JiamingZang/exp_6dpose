@@ -1,5 +1,0 @@
-base: dense80_depthc_guided.yaml
-
-solver:
-  guided_iters: 4
-  guided_radius: 20

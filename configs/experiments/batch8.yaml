@@ -1,5 +1,5 @@
 # 并行 extract 用：batch 8 控制单进程显存（~6GB），支持 3 进程并行
-base: default.yaml
+base: ../current/default.yaml
 
 matching:
   batch_size: 8

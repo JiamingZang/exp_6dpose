@@ -32,7 +32,7 @@ def render_template_bank(trainer, cfg_templates: Dict, out_path,
 
     Args:
         trainer: 训练完成的 GaussianTrainer
-        cfg_templates: configs/default.yaml 的 templates 段
+        cfg_templates: configs/current/default.yaml 的 templates 段
         out_path: 输出 npz 路径
     Returns:
         dict(images (M,S,S,3) uint8, alphas (M,S,S) float16,
@@ -74,8 +74,8 @@ def render_template_bank(trainer, cfg_templates: Dict, out_path,
             # 背景合成为纯色（DINOv2/MASt3R 输入更干净）
             rgb = rgb + (1.0 - alpha) * bg_color
 
-            # 3D 坐标图：默认逆深度混合（expected_invdepth，官方
-            # depth-regularization 同款，见 scripts/patch_depth_anchor_maps.py
+            # 3D 坐标图：逆深度混合（expected_invdepth，官方
+            # depth-regularization 同款，见 scripts/maintenance/patch_depth_anchor_maps.py
             # 与 docs/RESEARCH_LOG.md §2-4）。直接 μ 位置混合会被深层高斯
             # 泄漏拉远（中心壳偏内 4-7%，PnP 深度系统性偏浅/偏深），逆深度
             # 混合近处高斯主导，锚点深度与真实表面一致（实测偏差 +0.03%）。

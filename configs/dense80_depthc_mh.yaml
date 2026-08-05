@@ -1,8 +1,0 @@
-base: dense80_depthc.yaml
-
-solver:
-  multi_hypo: true
-  multi_hypo_seeds: 4
-  multi_hypo_iou: 0.3
-  refine_lambda_lpips: 0.0
-  refine_iters: 100
