@@ -1648,8 +1648,9 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
         if fr.mask_path is not None:
             gt_mask = cv2.imread(str(fr.mask_path), cv2.IMREAD_GRAYSCALE) > 0
         if matches_dir is not None:
-            # 阶段 3 路径：从落盘的阶段 2 产物直接求解（跳过 MASt3R）
-            npz = Path(matches_dir) / obj_name / f"{fr.frame_id:06d}.npz"
+            # 阶段 3 路径：从落盘的阶段 2 产物直接求解（跳过 MASt3R）。
+            # run_linemod 传入的 matches_dir 已含 obj 子目录。
+            npz = Path(matches_dir) / f"{fr.frame_id:06d}.npz"
             ex = load_extracted_matches(npz)
             res = estimator._solve(ex, fr.K,
                                    return_candidates=bool(topk_ks))
