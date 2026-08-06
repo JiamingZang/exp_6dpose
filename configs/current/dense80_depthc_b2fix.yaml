@@ -1,0 +1,4 @@
+base: ../archive/dense80_depthc.yaml
+
+matching:
+  batch_size: 2
