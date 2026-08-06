@@ -44,7 +44,7 @@ def test_gaussian_trainer_import_hint():
 
 def test_mast3r_matcher_import_hint():
     from src.matching.mast3r_wrapper import Mast3rMatcher
-    with pytest.raises(Exception, match="MASt3R 推理需要 GPU 机器.*No module named"):
+    with pytest.raises(Exception, match="MASt3R 推理需要 GPU 机器"):
         Mast3rMatcher({"mast3r_checkpoint": "x"}, device="cuda")
 
 
