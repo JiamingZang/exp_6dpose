@@ -42,7 +42,7 @@ python scripts/eval/summarize13.py --results outputs/exp_full/results --out ...
 
 ## Live Log
 
-- `08-05`：全量提取推进，10/13 物体完成（ape 1292/benchvise 1390/cam 1377/can 1252/cat 1355/driller 1244/duck 1190/eggbox 1189/glue 1156/holepuncher 1173）
+- `08-05`：全量提取推进，10/13 物体完成（真实 eval 帧数：ape 1172/benchvise 1150/cam 1137/can 1132/cat 1115/driller 1124/duck 1190/eggbox 1189/glue 1156/holepuncher 1173）
 - `08-05~06`：iron/lamp/phone 提取与评估并行时 GPU OOM 中断，各只完成 170/242/256 帧
 - `08-06 09:07-09:09`：评估批跑崩——evaluate_object 双重 obj 路径 bug（`matches13_w1/cam/cam/...`）→ FileNotFoundError；已回滚（c553549）
 - `08-06 09:19`：重启 eval7.sh（xargs -P2）+ 批 A；批 A 因坏 npz 再崩
@@ -51,8 +51,8 @@ python scripts/eval/summarize13.py --results outputs/exp_full/results --out ...
   - **cat 399/1747 个文件损坏**（截断/CRC/解压错误，全帧范围分布）
   - 其余 9 物体完整性扫描全部干净（含 ape/benchvise/cam/can/driller/duck/iron/lamp/phone）
   - 根因：提取脚本 `if npz.exists(): continue` 跳过已有文件，截断文件永久带伤；损坏源为提取期磁盘 100% 满或进程被杀时的半写
-  - 修复：删除 399+3 个坏文件，`dense80_depthc_b2fix.yaml`（batch_size=2，与评估并行省显存）补提取，全部完成（eggbox 1189/1189、glue 1156/1156、holepuncher 1173/1173、cat 补 399 帧中）
-- `08-06`：eval7.sh 评估中（ape ~775+/1292、benchvise ~600+/1390，约 6 帧/分钟/进程）；批 A 待 cat 补提取完成后重启
+  - 修复：删除 399+3 个坏文件，`dense80_depthc_b2fix.yaml`（batch_size=2，与评估并行省显存）补提取，全部完成（eggbox 1189/1189、glue 1156/1156、holepuncher 1173/1173、cat 1115/1115，重扫 0 坏）
+- `08-06`：eval7.sh 评估中（ape ~775+/1172、benchvise ~600+/1150，约 6 帧/分钟/进程）；批 A 待 cat 补提取完成后重启
 
 ## Result
 
