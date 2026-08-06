@@ -10,7 +10,7 @@ from src.detection.localize import (cosine_max_score, expand_bbox,
 from src.matching.mast3r_wrapper import decode_template_indices
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CFG = str(ROOT / "configs" / "default.yaml")
+DEFAULT_CFG = str(ROOT / "configs" / "current" / "default.yaml")
 
 
 def _ab(name: str) -> str:

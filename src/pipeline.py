@@ -556,10 +556,18 @@ class PoseEstimator:
             sc = cfg["solver"]
             self._refiner = PoseRefiner(
                 refiner_ckpt, device=device,
-                lr=float(sc.get("refine_lr", 0.02)),
-                iterations=int(sc.get("refine_iters", 150)),
+                lr=float(sc.get("refine_lr", 0.01)),
+                iterations=int(sc.get("refine_iters", 400)),
                 lambda_ssim=float(sc.get("refine_lambda_ssim", 0.5)),
-                lambda_lpips=float(sc.get("refine_lambda_lpips", 0.1)),
+                lambda_ms_ssim=float(
+                    sc.get("refine_lambda_ms_ssim", 1.0)),
+                lambda_mask=float(sc.get("refine_lambda_mask", 0.5)),
+                lambda_lpips=float(sc.get("refine_lambda_lpips", 0.0)),
+                warmup_steps=int(sc.get("refine_warmup_steps", 10)),
+                early_stop_grad_window=int(
+                    sc.get("refine_early_stop_grad_window", 5)),
+                early_stop_grad_tol=float(
+                    sc.get("refine_early_stop_grad_tol", 1e-4)),
                 early_stop_patience=int(
                     sc.get("refine_early_stop_patience", 0)),
                 early_stop_tol=float(
@@ -574,7 +582,7 @@ class PoseEstimator:
             if bool(sc.get("multi_hypo", False)):
                 self._hypo_refiner = PoseRefiner(
                     refiner_ckpt, device=device,
-                    lr=float(sc.get("refine_lr", 0.02)),
+                    lr=float(sc.get("refine_lr", 0.01)),
                     iterations=int(sc.get("multi_hypo_iters", 50)),
                     lambda_ssim=float(sc.get("refine_lambda_ssim", 0.5)),
                     lambda_lpips=0.0,

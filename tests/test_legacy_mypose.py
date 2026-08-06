@@ -602,8 +602,8 @@ def test_aggregate_topk_averages_unrounded_per_object():
 # ---------------------------------------------------------------------------
 # 6. legacy_mypose.yaml 配置：base 继承 + 逐项复现旧管线
 # ---------------------------------------------------------------------------
-LEGACY_CFG = str(ROOT / "configs" / "legacy_mypose.yaml")
-DEFAULT_CFG = str(ROOT / "configs" / "default.yaml")
+LEGACY_CFG = str(ROOT / "configs" / "current" / "legacy_mypose.yaml")
+DEFAULT_CFG = str(ROOT / "configs" / "current" / "default.yaml")
 
 
 def test_legacy_config_reproduces_prior_pipeline():

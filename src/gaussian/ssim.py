@@ -44,3 +44,25 @@ def ssim(img1: torch.Tensor, img2: torch.Tensor,
     ssim_map = ((2 * mu1_mu2 + C1) * (2 * sigma12 + C2)) / \
                ((mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2))
     return ssim_map.mean()
+
+
+# 标准 5 尺度 MS-SSIM 权重（Wang et al. 2003 / pytorch-msssim 同款）
+_MS_WEIGHTS = (0.0448, 0.2856, 0.3001, 0.2363, 0.1333)
+
+
+def ms_ssim(img1: torch.Tensor, img2: torch.Tensor,
+            window_size: int = 11, sigma: float = 1.5) -> torch.Tensor:
+    """多尺度 SSIM(img1, img2)，输入 (B,C,H,W)，值域 [0,1]，返回标量。
+
+    每尺度 2× 平均池化下采样后求单尺度 SSIM，按标准权重加权求和
+    （与 GS-Pose 的 MS_SSIM 项同款）。输入小于 2^4 像素时退化为单尺度。
+    """
+    total = torch.zeros((), device=img1.device, dtype=img1.dtype)
+    a, b = img1, img2
+    for w in _MS_WEIGHTS:
+        total = total + w * ssim(a, b, window_size=window_size, sigma=sigma)
+        if min(a.shape[2], a.shape[3]) < 4:
+            break
+        a = F.avg_pool2d(a, 2)
+        b = F.avg_pool2d(b, 2)
+    return total
