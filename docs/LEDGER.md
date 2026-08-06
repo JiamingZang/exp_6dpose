@@ -16,12 +16,13 @@
 | 7 | 全物体黑背景 | done | 63.33% | 深色物体崩（driller 61.7）|
 | 8 | 深色白背景（定型）| done | driller 95.0 | **背景色按物体亮度选** |
 | 9 | **dc2 + guided_refine** | **champion** | **69.36%** | 弱物体普涨（holepuncher +7.5）|
+| 10 | 回退保护 + 全量评估 | done | **69.74%**（全量 14968 帧）| 子集 71.55 全量衰减 -1.8；can 92.58/lamp 91.83 追近 GSPose 单项；refiner 净负贡献坐实 → 排队 6d-refiner-v2 |
 
 ## 配置 × 结果对照
 
 | 配置 | 状态 | 数字/用途 |
 |---|---|---|
-| dense80_depthc_guided.yaml | **champion** | 轮 9 主表 69.36 |
+| dense80_depthc_guided.yaml | **champion** | 轮 9 子集 69.36 → 轮 10 全量 69.74（14968 帧）|
 | dense80_depth_bg0.yaml | current | 浅色物体训练（黑背景 depth 0.6）|
 | dense80_depth_w1.yaml | current | 深色物体训练（白背景）|
 | dense80_depthc.yaml / dense80_dc2_t02.yaml / dense80_dc2_t02g20.yaml | done | dc2 调参过程 |

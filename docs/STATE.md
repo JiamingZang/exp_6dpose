@@ -1,29 +1,30 @@
 # STATE.md —— 唯一状态源（agent 进来先读这个）
 
 > 更新规则：每轮实验出结果**同一次操作内**更新本文件。
-> 上次更新：2026-08-05（回退保护冠军 71.55；全量提取在跑）
+> 上次更新：2026-08-07（全量 13 物体评估完成，MEAN 69.74）
 
 ## 冠军（论文主表数字）
 
 | 项 | 值 |
 |---|---|
-| 数据 | LineMod 13 物体 × 120 帧均匀采样（子集，全量待跑）|
-| **MEAN** | **ADD 71.55 / Proj — / 5cm5° —**（回退保护：refiner 精化前后渲染对齐损失择优，子集 120 帧/物体）|
+| 数据 | LineMod 13 物体 × **全量 14968 帧**（排除参考帧）|
+| **MEAN** | **ADD 69.74 / Proj 83.77 / 5cm5° 68.69**（回退保护：refiner 精化前后渲染对齐损失择优）|
+| 子集对照 | 120 帧子集 71.55（08-05 口径，全量 -1.8 属正常衰减）|
 | 基线对照 | 无 dc2：67.44 / 81.54 / 66.54；旧代码 MyPose top1：49.49 / 59.22（端到端可比）|
-| 配置 | `configs/current/dense80_depthc_guided.yaml` + 回退保护（refine 变差回退粗位姿）；can 92.5 追平 GSPose 单项 |
+| 配置 | `configs/current/dense80_depthc_guided.yaml` + 回退保护（refine 变差回退粗位姿）；can 92.58 追平 GSPose 单项 |
 | 模板库 | dense80（fibonacci 16 视角 × 5 平面内旋转，512×512），固定视图 + 逆深度锚点 |
 | 训练背景 | 按物体亮度：浅色黑背景（depth 0.6）、深色白背景（driller/cam）|
-| 外部目标 | GSPose 92.0，差 20.5，缺口集中在 duck/ape/cat（33-47）|
-| 结果 | `matches13_dc2` 提取 + `scripts/eval/summarize13.py` 汇总 |
+| 外部目标 | GSPose 92.0（YOLOv5 检测框口径），差 22.3；缺口集中在 duck 32.3/ape 42.5/cat 51.3/holepuncher 44.5 |
+| 结果 | `outputs/exp_full/results/*.json`（14968 帧全量）|
 
 ## 在跑 / 待办
 
 | 项 | 说明 |
 |---|---|
-| 6d-full-linemod（全量评估）| 全量 13 物体确认子集 71.55——**论文审稿必问**；提取中（5/13 完成）|
-| refine 两档对比 | 纯几何档 vs 几何+精化档（论文 §3.7 占位，见 citecoon P4）|
+| 6d-refiner-v2（排队，优先级 1）| 按 GS-Pose（SSIM+MS-SSIM、去 LPIPS、cosine lr 退火）+ 旧代码（mask_loss 形状主导、best-loss 回溯、多假设）重做 refiner——当前精化净负贡献，最大提升杠杆 |
+| 6d-vggt-recon | VGGT 重建替代/辅助 MASt3R（新模块验证）|
+| 6d-weak-objects | duck/ape/cat/holepuncher 失败帧训练/锚点级修复 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章）|
-| D 类深挖 | duck/holepuncher/ape：锚点/训练级问题，guided 已证明覆盖不全 |
 
 ## 黑名单（已证伪/已定型，禁止回退重跑）
 

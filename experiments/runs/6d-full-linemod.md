@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-full-linemod` |
 | Owner | agent |
-| Status | `running` |
+| Status | `done` |
 | Started | `2026-08-05` |
-| Finished | empty |
+| Finished | `2026-08-07 05:05` |
 | Queue row | `experiments/QUEUE.md::6d-full-linemod` |
 
 ## Question
@@ -19,7 +19,7 @@
 
 | 项 | 值 |
 |---|---|
-| Config | `configs/current/dense80_depthc_guided.yaml`（回退保护）；cam/driller 用 `dense80_w1.yaml` |
+| Config | configs/current/dense80_depthc_guided.yaml （回退保护）、configs/current/dense80_w1.yaml （cam/driller）|
 | Code change | c553549（回滚 evaluate_object 路径拼接）、39d949f |
 | Data split | 全量 eval 帧（exclude_refs + n_ref=64） |
 | Metrics | ADD(S)@0.1d / Proj@5px / 5cm5° |
@@ -58,20 +58,25 @@ python scripts/eval/summarize13.py --results outputs/exp_full/results --out ...
 
 | 指标 | baseline（120帧子集） | this run（全量） | delta | note |
 |---|---:|---:|---:|---|
-| mean ADD(S)@0.1d | 71.55 | pending |  |  |
-| mean Proj@5px | pending | pending |  |  |
-| mean 5cm5° | pending | pending |  |  |
+| mean ADD(S)@0.1d | 71.55 | **69.74** | -1.81 | 14968 帧，正常衰减 |
+| mean Proj@5px | — | **83.77** |  |  |
+| mean 5cm5° | — | **68.69** |  |  |
+
+逐物体（全量 ADD）：ape 42.49 / benchvise 79.65 / cam 63.68 / can 92.58 /
+cat 51.30 / driller 90.57 / duck 32.27 / eggbox 95.63 / glue 75.52 /
+holepuncher 44.50 / iron 87.59 / lamp 91.83 / phone 61.49。
+外部对照：GSPose 92.0（YOLOv5 框口径）差 22.3；can/lamp 单项已接近。
 
 ## Decision
 
-- 结论：`running`
-- 原因：评估未完成
-- 下一步：cat 补提取完成后重启批 A；全部完成后汇总入 STATE
+- 结论：`done`
+- 原因：全量 13 物体完成，数字入 STATE（论文主表可引用）
+- 下一步：`6d-refiner-v2`（重做 refiner，最大提升杠杆）
 
 ## Sync Checklist
 
-- [ ] `experiments/QUEUE.md` 状态已更新
-- [ ] `docs/STATE.md` 冠军/在跑/下一步已更新
-- [ ] `docs/LEDGER.md` 已新增或更新一行
-- [ ] 结果文件路径写清楚
+- [x] `experiments/QUEUE.md` 状态已更新
+- [x] `docs/STATE.md` 冠军/在跑/下一步已更新
+- [x] `docs/LEDGER.md` 已新增或更新一行
+- [x] 结果文件路径写清楚
 - [ ] `python3 scripts/analysis/check_state.py` 通过
