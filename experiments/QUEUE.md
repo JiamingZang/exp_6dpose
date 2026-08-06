@@ -11,6 +11,7 @@
 | ID | status | priority | config | run record | question | success line | notes |
 |---|---|---:|---|---|---|---|---|
 | 6d-full-linemod | running | 1 | `configs/current/dense80_depthc_guided.yaml`（回退保护）| `experiments/runs/6d-full-linemod.md` | 120 帧子集 71.55 能否在全量 LineMod 保持？| 全量 13 物体完成，mean ADD/Proj/5cm5° 入 STATE | 提取中：已完成 ape 1292/benchvise 1390/cam 1377/can 1252/cat 1355；剩余 8 物体补跑（extract_rest8.sh）|
+| 6d-refiner-v2 | todo | 1 | 待改（`src/gaussian/pose_refiner.py`，配置新档位）| `experiments/runs/6d-refiner-v2.md` | 按 GS-Pose（SSIM+MS-SSIM、去 LPIPS、cosine lr 退火、edge_err 择优）+ 旧代码（mask_loss 形状主导、best-loss 回溯、多假设）重做 refiner 能否把精化从净负转正？| 120 帧子集 MEAN ≥ 71.55 且弱项（duck/ape/cat/holepuncher）任一 +5 | 三方对比已做（GS-Pose inference.py:454-580 / 旧 MyPose refine.py）；当前 refiner 独有 LPIPS 优化 + 固定 lr + 无 mask 形状监督，与两者均不同 |
 | 6d-vggt-recon | todo | 2 | 待定（src/datasets/vggt_recon.py 新模块）| `experiments/runs/6d-vggt-recon.md` | VGGT 重建替代/辅助 MASt3R 能否提升弱项物体（duck/ape）的匹配精度？| 弱项任一 +5 且无大类崩溃 | 新架构新增模块，先小样本验证再全量 |
 | 6d-weak-objects | todo | 2 | 待定 | `experiments/runs/6d-weak-objects.md` | duck/ape/cat 失败帧（proj<5px 占 70%）有无训练/锚点级修复？| 任一弱项 +5，MEAN 不降 | 已确认是匹配精度极限（align 判对率 55%），需换信息源而非测试时微调 |
 | 6d-tracking-speed | blocked | 3 | 待新增 | `experiments/runs/6d-tracking-speed.md` | 上帧位姿初始化能否把 7.1s/frame 降到 <1s？| 速度 <1s/frame 且 ADD 下降可解释 | 需要先定 tracking 协议 |
