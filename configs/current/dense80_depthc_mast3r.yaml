@@ -1,0 +1,8 @@
+# 候选池隔离消融：fastsam 掩码 + MASt3R sim 全解码（无 DINOv2 预筛）
+# 与 gt_mask（全解码）的唯一差异 = 掩码/crop；与主链（dinov2 top-40）的
+# 唯一差异 = 候选池来源（MASt3R sim vs DINOv2 CLS）
+base: dense80_depthc_guided.yaml
+
+matching:
+  template_ranking: mast3r
+  template_prescreen: none

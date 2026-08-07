@@ -19,7 +19,8 @@
 | task1-1-stable-prior | done | 1 | `scripts/analysis/stable_pose_prior.py` | `experiments/runs/task1-1-stable-prior.md`| 测试序列物体是否处于稳定摆放（GT 朝上轴 vs 稳定族共识方向）？| GT 中位角差 >30° 判死 | **通过（判据修正）**：单方向 g* 迭代 + can 本底对照；duck 18.7/cat 15.8/holepuncher 18.0 vs can 20.1（同水平），ape 24.5（40% >30° 软信号）→ 进入任务 1.2 接入点 B（A 判死：模板物体姿态固定，加权无区分度）|
 | task1-2-prior-insert | done | 1 | 接入点 B：`src/solver/selection.py` prior 项（A 判死）| `experiments/runs/task1-2-prior-insert.md` | 稳定先验软评分（score = inlier + λ·prior）能否提升弱物体？| 4 弱物体 ADD ≥+2mm 且 can 不降（±1mm）| **判负**：duck -6.67 / holepuncher -5.83 / cat +3.33 / ape +0.83（平均 -2.08）；机制=联合 PnP 吞择优 + 本底 18-20° 使 prior 重叠；死因"先验与失败帧错配" |
 | 6d-loc-upper | done | 1 | `configs/current/dense80_depthc_gtmask.yaml` + `dense80_depthc_sam.yaml` | `experiments/runs/6d-loc-upper.md` | FastSAM 分割是否是弱物体瓶颈（gt_mask 上界下 ADD 提升多少）？| gt_mask 下 duck ADD ≥ +5 → 定位是瓶颈 | **结案**：4/5 弱物体定位侧瓶颈（holepuncher +9.17/cat +7.5/duck +5.84/can +5.0），ape 唯一匹配侧例外（-1.67）；SAM 对照判负（掩码 IoU 0.914 vs 0.910 几乎相同）；6d-weak-objects 分流：duck/cat/holepuncher 检测侧，ape 匹配侧 |
-| 6d-weak-objects | todo | 2 | 待定 | `experiments/runs/6d-weak-objects.md` | duck/ape/cat 失败帧（proj<5px 占 70%）有无训练/锚点级修复？| 任一弱项 +5，MEAN 不降 | 已确认是匹配精度极限（align 判对率 55%），需换信息源而非测试时微调 |
+| 6d-cand-pool | running | 1 | `configs/current/dense80_depthc_mast3r.yaml`（fastsam 掩码 + 全解码）| `experiments/runs/6d-cand-pool.md` | duck 残余 5.0 差距是否来自候选池来源（DINOv2 top-40 vs MASt3R sim top-40）？| mast3r ranking ADD 接近 gt_mask（39.17）→ 候选池是瓶颈，治预筛 | 6d-loc-upper 结案后拆解：gt_mask 全解码 vs 主链 dinov2 预筛，候选池不同源 |
+| 6d-weak-objects | todo | 2 | 待定 | `experiments/runs/6d-weak-objects.md` | duck/ape/cat 失败帧（proj<5px 占 70%）有无训练/锚点级修复？| 任一弱项 +5，MEAN 不降 | 上界量化分流：duck/cat/holepuncher 检测侧（候选池/掩码），ape 匹配侧 |
 | 6d-tracking-speed | blocked | 3 | 待新增 | `experiments/runs/6d-tracking-speed.md` | 上帧位姿初始化能否把 7.1s/frame 降到 <1s？| 速度 <1s/frame 且 ADD 下降可解释 | 需要先定 tracking 协议 |
 
 ## 已完成（历史记录，勿重跑）

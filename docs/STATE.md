@@ -21,7 +21,8 @@
 
 | 项 | 说明 |
 |---|---|
-| 6d-weak-objects（优先级 1，方向已定）| **上界量化结案**：duck/cat/holepuncher/can 定位侧瓶颈（gt_mask +5~9.17），ape 唯一匹配侧（-1.67）；duck 残余 5.0 拆解实验（gt_mask+真实检索 / crop 分解）定检测改进机制 |
+| 6d-cand-pool（在跑，优先级 1）| duck 残余 5.0 拆解：候选池来源消融（DINOv2 top-40 vs MASt3R sim 全解码）——mast3r ranking 接近 gt_mask 则治预筛 |
+| 6d-weak-objects（优先级 2，方向已定）| **上界量化结案**：duck/cat/holepuncher/can 定位侧瓶颈（gt_mask +5~9.17），ape 唯一匹配侧（-1.67）；检测改进机制待 6d-cand-pool 定 |
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
 
