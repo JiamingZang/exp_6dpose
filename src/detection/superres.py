@@ -20,16 +20,25 @@ def upscale_crop(crop: np.ndarray, mask: np.ndarray, mode: int = 1,
     if mode == 1:                       # bicubic 基线
         crop_sr = cv2.resize(crop, None, fx=_SCALE, fy=_SCALE,
                              interpolation=cv2.INTER_CUBIC)
-    elif mode == 2:                     # Real-ESRGAN（权重受限，抛提示）
+    elif mode == 2:                     # Real-ESRGAN（权重已从 HF 镜像获取）
+        import sys
+        import torchvision.transforms as T
+        # realesrgan 0.3.0 引用 torchvision.transforms.functional_tensor
+        # （torchvision>=0.17 移除），注入兼容 shim
+        if not hasattr(T, "functional_tensor"):
+            import types
+            import torchvision.transforms.functional as F
+            ft = types.ModuleType("torchvision.transforms.functional_tensor")
+            ft.rgb_to_grayscale = F.rgb_to_grayscale
+            sys.modules["torchvision.transforms.functional_tensor"] = ft
         try:
             from realesrgan import RealESRGANer
             from basicsr.archs.rrdbnet_arch import RRDBNet
         except ImportError as e:
             raise ImportError(
-                "crop_sr=2 需要 realesrgan + basicsr 包与权重\n"
+                "crop_sr=2 需要 realesrgan + basicsr 包\n"
                 "  pip install realesrgan basicsr\n"
-                "权重 RealESRGAN_x4plus.pth 需从 GitHub release 获取（仓库网络受限），"
-                "先用 crop_sr=1（bicubic）验证分辨率瓶颈") from e
+                f"原始错误: {e}") from e
         model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64,
                         num_block=23, num_grow_ch=32, scale=4)
         upsampler = RealESRGANer(scale=4, model_path="weights/RealESRGAN_x4plus.pth",

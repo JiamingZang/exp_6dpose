@@ -25,3 +25,7 @@ trimesh
 # vggt                    # 消融 3.3.5 VGGT 路线：pip install vggt 或源码安装
 # kornia                  # 消融 3.3.3 LoFTR（TODO 接口，实现后启用）
 # MASt3R 本体不装 pip 包：setup_gpu.sh 克隆源码并加入 PYTHONPATH
+pybullet==3.2.7                # 任务 1.1 稳定摆放先验（自由落体模拟）
+trimesh                        # 任务 1.1 网格加载（pybullet 不吃 ply）
+realesrgan==0.3.0              # 任务 2 ESRGAN 超分臂（权重 weights/RealESRGAN_x4plus.pth）
+basicsr                         # realesrgan 依赖
