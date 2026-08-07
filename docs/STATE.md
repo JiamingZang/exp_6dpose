@@ -38,6 +38,7 @@
 | 重训后重采样模板视图 | 与像素对应错位 0.5%，**视图必须固定**（rebuild_bank_fixed_views）| 轮 4 |
 | 全物体统一背景色 | 浅色需黑背景、深色需白背景，单一必崩一边（eggbox 9.2% / driller 61.7%）| 轮 6-8 |
 | 查询裁剪超分（任务 2）| 512 输入下超分=两次插值纯损失：对应全翻牌（同帧 pix_q 相同占比 0%），bicubic/ESRGAN ADD 均崩到 0.83%；1024 输入 OOM | EXPERIMENTS.md 任务 2 |
+| 稳定先验接入（任务 1.2 接入点 B）| 先验与失败帧错配：duck -6.67 / holepuncher -5.83（本底 18-20° 使 prior 在正误候选间重叠，择优被噪声主导）；联合 PnP 吞择优 | EXPERIMENTS.md 任务 1.2 |
 | 旧表 67.63/80.06/65.13 | 误标背景的废数据，已作废（08-02 晚更正）| §3 更正 |
 | holepuncher 靠 guided_refine | 完全无改善，根因在训练/锚点层 | §3 guided 测试 |
 | VGGT-1B 成对位姿求解（在线）| R_err 中位 94°、tz 反号；同图对 0.02° 但跨视角 145°——跨图位姿回归不可靠（非纯域差）| EXPERIMENTS.md 6d-vggt-recon sanity |
