@@ -1,0 +1,7 @@
+# 掩码腐蚀隔离实验：腐蚀 1px 但保持原 crop_box（隔离"掩码像素"变量，
+# 排除 bbox 变紧的副作用——erode1 全量 -3.33 可能是 crop 放大变化所致）
+base: dense80_depthc_guided.yaml
+
+detection:
+  mask_erode: 1
+  mask_erode_keep_bbox: true

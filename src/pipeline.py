@@ -666,7 +666,8 @@ class PoseEstimator:
             # 掩码边界腐蚀（6d-weak-objects 机制验证）：FastSAM 掩码边界
             # 像素误当前景参与 MASt3R 匹配 → 对应噪声（gt_mask 上界 +5.84
             # 全部归因掩码/crop 内容，候选池消融已排除排序因素）。腐蚀后
-            # 重算外接框 + expand 0.2，与 GT 掩码路线同构（localize.py:87）。
+            # 默认重算外接框 + expand 0.2（与 GT 掩码路线同构，localize.py:87）；
+            # mask_erode_keep_bbox=true 时保持原 crop_box（隔离掩码像素变量）。
             erode = int(d_cfg.get("mask_erode", 0) or 0)
             if erode > 0 and self._loc_mode not in ("gt_mask", "gt_bbox"):
                 import cv2
@@ -674,16 +675,19 @@ class PoseEstimator:
                               np.ones((erode, erode), np.uint8)).astype(bool)
                 if m.sum() < 16:
                     return None
-                ys, xs = np.nonzero(m)
-                bbox = (int(xs.min()), int(ys.min()),
-                        int(xs.max() - xs.min() + 1),
-                        int(ys.max() - ys.min() + 1))
-                h, w = img_rgb_u8.shape[:2]
-                from .detection.localize import expand_bbox
-                loc = dataclasses.replace(
-                    loc, mask=m,
-                    crop_box=expand_bbox(
-                        bbox, float(d_cfg.get("bbox_expand", 0.2)), w, h))
+                if not bool(d_cfg.get("mask_erode_keep_bbox", False)):
+                    ys, xs = np.nonzero(m)
+                    bbox = (int(xs.min()), int(ys.min()),
+                            int(xs.max() - xs.min() + 1),
+                            int(ys.max() - ys.min() + 1))
+                    h, w = img_rgb_u8.shape[:2]
+                    from .detection.localize import expand_bbox
+                    loc = dataclasses.replace(
+                        loc, mask=m,
+                        crop_box=expand_bbox(
+                            bbox, float(d_cfg.get("bbox_expand", 0.2)), w, h))
+                else:
+                    loc = dataclasses.replace(loc, mask=m)
             x0, y0, x1, y1 = loc.crop_box
             crop = img_rgb_u8[y0:y1, x0:x1]
             mask_crop = loc.mask[y0:y1, x0:x1]
