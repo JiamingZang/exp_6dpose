@@ -354,3 +354,27 @@ iron 89.2(+0.9)，lamp 91.7(-0.8) 例外，其余持平。
 | **MEAN** | **70.97** | **71.55** |
 
 **修复**：LPIPS 极小输入崩溃（<32px 跳过）；can 匹配路径修正（matches13_dc2）。
+
+## 6d-refiner-v2 + 6d-pointmap-t1 诊断（08-07）
+
+### refiner-v2（GS-Pose/旧代码思路重做）
+- 改动：去 LPIPS（lambda_lpips=0）、+MS-SSIM（5 尺度）、+mask 形状监督（L1(alpha,mask)）、
+  AdamW + warmup10 + 余弦退火到 0、400 步上限、5 步梯度均值早停、best-delta 回溯
+- 120 帧子集（弱项 5 物体）：ape 45.0（持平）/ duck 26.67（-6.6）/ holepuncher 46.67（-5.8）
+- 诊断（duck 120 帧 coarse/refined 落盘分析）：
+  - rv2 优化器本身中性：精化后 ADD 变好 55 帧 / 变差 65 帧
+  - 回退保护接受 112 帧中 57 帧真更差（align_loss 判对率 51%）
+  - mask_iou 判据同样 51%、align_loss 53%——**duck 上测试时可得的判据全部失效**
+  - 结论：单起点局部光度优化在低纹理物体一半帧被推坏，且无法判别；多假设
+    （GS-Pose ROT_TOPK 旋转候选起步）是最后的机制差异，待试
+
+### 6d-pointmap-t1（MASt3R pointmap 3D-3D 对齐替代 PnP）——不可行
+- 前提核实：pts3d_q 已落盘（mast3r_wrapper.py:46），现仅做深度一致性过滤
+- 坐标系实测（重放 MASt3R 前向）：
+  - res1（查询像素 3D）≈ 模板相机系（残差 130mm），非查询相机系（290mm）
+  - res2（模板像素 3D）与 T_tpl(X) 纯缩放对齐（ratio 0.005，std 极小）
+  - → MASt3R 成对输出为统一系（img1 系），**查询相机系 3D 不存在**
+  - Kabsch(P_t, P_q) t_rel≈0（同系无变换可求）
+- 域差坐实：渲染-真实图对的 pointmap 深度形变 ~34%（130mm/380mm）——
+  第三档（多视角全局对齐）风险判死
+- 结论：第一档原始方案前提不成立；pointmap 已有价值 = dc2 深度一致性（在用）
