@@ -652,6 +652,13 @@ class PoseEstimator:
         if loc is None:
             return None
 
+        # ---- 掩码像素交叉实验（6d-mask-erode 拆解）：fastsam 定位（bbox
+        # 保持）但前景掩码换 GT——隔离"掩码像素"与"crop 内容"的贡献 ----
+        if (bool(d_cfg.get("use_gt_mask_for_fg", False))
+                and gt_mask is not None and self._loc_mode != "gt_mask"):
+            loc = dataclasses.replace(
+                loc, mask=np.asarray(gt_mask, dtype=bool))
+
         # ---- 裁剪（context_pad = 默认；tight_square = 历史对照口径）----
         if self._crop_mode == "tight_square":
             from .detection.localize import legacy_square_crop

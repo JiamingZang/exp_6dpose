@@ -45,24 +45,31 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_erode
 - `08-08 04:10`：对应质量离线分析（GT 掩码有效对应多 11%：137k vs 123k；
   sim 0.985 vs 0.984）→ 假说修正：溢出环 → 对应损失；3px 腐蚀矫枉过正
 - `08-08 04:12`：erode1 启动（甜点档：去溢出环、保真实前景）
+- `08-08 04:40`：erode1 完成 → **30.0/81.67/40.83（-3.33 仍降）**
+- `08-08 04:45`：erode1-kb 启动（固定 bbox 隔离 bbox 变紧副作用）
+- `08-08 05:05`：erode1-kb 完成 → **30.83/81.67/40.83（几乎相同）**
+- `08-08 05:10`：gtfg 交叉实验启动（fastsam bbox + GT 掩码像素）
 
 ## Result
 
-| 指标 | 主链 | erode3 | erode1 | gt_mask | note |
-|---|---:|---:|---:|---:|---|
-| ADD | 33.33 | 26.67 | 待出 | 39.17 | 3px 崩盘 |
-| Proj | 81.67 | 80.83 | 待出 | 85.0 | |
-| 5cm5° | 42.5 | 29.17 | 待出 | 50.0 | |
+| 指标 | 主链 | erode3 | erode1 | erode1-kb | gtfg | gt_mask | note |
+|---|---:|---:|---:|---:|---:|---:|---|
+| ADD | 33.33 | 26.67 | 30.0 | 30.83 | 待出 | 39.17 | 腐蚀方向全负 |
+| Proj | 81.67 | 80.83 | 81.67 | 81.67 | 待出 | 85.0 | |
+| 5cm5° | 42.5 | 29.17 | 40.83 | 40.83 | 待出 | 50.0 | |
 
-结果文件：`outputs/exp_erode/results/duck.json`、`outputs/exp_erode1/results/duck.json`（待出）。
+结果文件：`outputs/exp_erode{1,,_kb}/results/duck.json`、`outputs/exp_gtfg/results/duck.json`（待出）。
 
 ## Decision
 
-- 结论：`running`（erode3 判负；erode1 验证甜点）
-- 原因：面积比反证欠分割假说（fastsam/GT 1.02-1.08 系统性偏大）；对应数
-  反证供给假说方向（GT 多 11% 有效对应）；3px 腐蚀在小物体上损失真实
-  前景 → 崩
-- 下一步：erode1 结果定机制（回升=溢出环噪声坐实）
+- 结论：`running`（腐蚀三档全判负；交叉实验最后拆解）
+- 原因：面积比反证欠分割（fastsam/GT 1.02-1.08 偏大）；对应数显示 GT 多
+  11% 有效对应；但腐蚀 1/3px（bbox 重算或固定）均降——掩码收缩本身有害，
+  bbox 变紧副作用可忽略（30.0 vs 30.83）→ "溢出环噪声"假说证伪；
+  GT 收益 = 掩码形状保真（精确贴合），简单形态学后处理不可复现
+- 下一步：gtfg（fastsam bbox + GT 掩码像素）→ 拆"掩码像素"与"crop 内容"；
+  若 gtfg ≈ 39.17 → 掩码像素是全部贡献（需掩码精化路线）；若 ≈ 33 →
+  crop 内容是关键（bbox 精化路线）
 
 ## Sync Checklist
 

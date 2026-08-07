@@ -1,0 +1,7 @@
+# 掩码像素交叉实验：fastsam 定位（真实 bbox/crop）+ GT 掩码前景像素
+# 预期：若 ≈ gt_mask(39.17) → GT 掩码像素本身是关键（精确贴合）；
+#       若 ≈ 主链(33.33) → crop/bbox 才是关键
+base: dense80_depthc_guided.yaml
+
+detection:
+  use_gt_mask_for_fg: true
