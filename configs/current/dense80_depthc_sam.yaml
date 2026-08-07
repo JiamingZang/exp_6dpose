@@ -1,0 +1,5 @@
+# 定位侧改进：SAM ViT-H 自动掩码（替代 FastSAM）——gt_mask 上界 +5.84 证明分割是瓶颈
+base: dense80_depthc_guided.yaml
+
+detection:
+  segmenter: sam

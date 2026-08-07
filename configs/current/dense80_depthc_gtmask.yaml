@@ -1,0 +1,5 @@
+# 定位上界消融：GT 掩码定位（分割完美）——揭示 FastSAM 分割是否瓶颈
+base: dense80_depthc_guided.yaml
+
+detection:
+  segmenter: gt_mask
