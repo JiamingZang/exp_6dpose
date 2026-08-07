@@ -1,0 +1,5 @@
+# 任务 2：查询裁剪超分 bicubic ×2 臂（M 类病信息预算修复）
+base: dense80_depthc_guided.yaml
+
+detection:
+  crop_sr: 1                # 1=bicubic ×2（零成本基线）；2=Real-ESRGAN（权重受限）

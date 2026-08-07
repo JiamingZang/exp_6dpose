@@ -662,6 +662,17 @@ class PoseEstimator:
             mask_crop = loc.mask[y0:y1, x0:x1]
             crop_box_used = loc.crop_box
             s_leg_x = s_leg_y = 1.0     # context_pad 无额外缩放
+
+        # ---- 查询裁剪超分（任务 2：M 类病信息预算修复）----
+        # 定位后 bbox 裁剪 ×2 再喂 MASt3R：小物体（duck/ape）在 512 输入下
+        # 像素太少被插值糊化，超分提供更多高频细节。缩放并入 s_leg 链，
+        # back_to_original_pixels 自动映射回原图（对应点坐标无需改动）。
+        sr = int(d_cfg.get("crop_sr", 0) or 0)
+        if sr:
+            from .detection.superres import upscale_crop
+            crop, mask_crop, s_sr = upscale_crop(crop, mask_crop, mode=sr)
+            s_leg_x *= s_sr
+            s_leg_y *= s_sr
         if crop.size == 0 or mask_crop.sum() < 16:
             return None
 
