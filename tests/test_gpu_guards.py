@@ -8,6 +8,7 @@
 import importlib
 
 import numpy as np
+import sys
 import pytest
 
 
@@ -75,7 +76,11 @@ def test_sam_localizer_unknown_segmenter_raises():
                          segmenter="unknown_value")
 
 
-def test_vggt_import_hint():
+def test_vggt_import_hint(monkeypatch):
+    # 本机装了 vggt 后原测试前提失效（import 不再失败）；用 sys.modules
+    # 置 None 强制 import 失败，验证提示信息仍在。
+    monkeypatch.setitem(sys.modules, "vggt", None)
+    monkeypatch.setitem(sys.modules, "vggt.models", None)
     from src.datasets.vggt_recon import reconstruct_with_vggt
     with pytest.raises(ImportError, match="vggt|VGGT|GPU"):
         reconstruct_with_vggt(["a.png", "b.png", "c.png"])

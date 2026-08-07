@@ -14,6 +14,7 @@
 """
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -468,10 +469,14 @@ class PoseEstimator:
 
     def __init__(self, cfg: Dict, bank: TemplateBank, device: str = "cuda",
                  refiner_ckpt: Optional[str] = None,
-                 symmetric_transforms: Optional[List] = None):
+                 symmetric_transforms: Optional[List] = None,
+                 stable_prior: Optional[Dict] = None):
         self.cfg = cfg
         self.bank = bank
         self.device = device
+        # 稳定摆放先验（任务 1.2 接入点 B）：{"axes": (K,3), "g": (3,)}，
+        # None = 不启用。软评分只影响择优排序，不硬过滤。
+        self.stable_prior = stable_prior
         # 对称物体（eggbox/glue）的物体系离散对称变换：PnP 内点判定展开
         self._sym_T = symmetric_transforms or []
 
@@ -857,7 +862,12 @@ class PoseEstimator:
 
         # ---- 步骤 9-10：几何一致性择优 ----
         strategy = s_cfg.get("selection", "inlier")
-        ranked = rank_candidates(results, strategy=strategy)
+        prior_info = None
+        if strategy == "prior_inlier" and self.stable_prior is not None:
+            prior_info = (self.stable_prior["axes"], self.stable_prior["g"],
+                          float(s_cfg.get("prior_lambda", 0.5)))
+        ranked = rank_candidates(results, strategy=strategy,
+                                 prior_info=prior_info)
         if not ranked:
             return None
         best = ranked[0]
@@ -1579,9 +1589,19 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
     # refine_pose=false 时也可能需要前向渲染（定位候选消歧），统一传入，
     # 缺 .pt 时 PoseEstimator 内部会跳过渲染验证。
     refiner_ckpt = str(template_bank_path(cfg, obj_name).with_suffix(".pt"))
+    stable_prior = None
+    if bool(cfg["solver"].get("stable_prior", False)):
+        sp_path = Path("outputs/stable_prior") / f"{obj_name}.npz"
+        if sp_path.exists():
+            sp = np.load(sp_path)
+            stable_prior = {"axes": sp["axes"], "g": sp["g"]}
+        else:
+            print(f"[evaluate:{obj_name}] stable_prior 开启但缺 {sp_path}，跳过",
+                  file=sys.stderr)
     estimator = PoseEstimator(cfg, bank, device=device,
                               refiner_ckpt=refiner_ckpt,
-                              symmetric_transforms=ds.discrete_symmetry_transforms())
+                              symmetric_transforms=ds.discrete_symmetry_transforms(),
+                              stable_prior=stable_prior)
     model_pts = ds.model_points(max_points=2000)   # 指标点数抽稀（BOP 惯例）
     mcfg = cfg["metrics"]
     # topK best 评估（历史对照口径，见 VERIFICATION.md §8.4）：K 个候选中按 GT 择优的上界

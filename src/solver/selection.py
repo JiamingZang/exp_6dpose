@@ -22,11 +22,27 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+import numpy as np
+
 from .ransac_pnp import PnPResult
 
 
+def stable_prior_score(R: np.ndarray, axes: np.ndarray, g: np.ndarray) -> float:
+    """稳定摆放先验分（任务 1.2 接入点 B）：候选位姿下物体"朝上轴"与台面法向的偏离。
+
+    R 为候选 w2c 旋转（模型→查询相机）；axes 为稳定姿态的模型系朝上轴集合
+    （(K,3) 单位向量），g 为查询系台面法向估计（单方向）。先验分取负最小夹角：
+    物体处于任一稳定姿态（朝上轴对齐台面法向）时 ≈0，偏离越大越负。
+    """
+    d = (R @ axes.T)                       # (3,K)：稳定轴在查询系
+    d = d / np.linalg.norm(d, axis=0, keepdims=True)
+    cos = np.clip(d.T @ g, -1, 1)
+    return -float(np.degrees(np.arccos(cos)).min())
+
+
 def rank_candidates(results: List[PnPResult], strategy: str = "inlier",
-                    keep_failed: bool = False) -> List[PnPResult]:
+                    keep_failed: bool = False,
+                    prior_info: Optional[tuple] = None) -> List[PnPResult]:
     """按择优判据把候选降序排序（top-K best 评估复用）。
 
     Args:
@@ -59,6 +75,15 @@ def rank_candidates(results: List[PnPResult], strategy: str = "inlier",
     elif strategy == "weighted":
         # 内点数 × 相似度：相似度为非负权重（负相似度截断为 0，避免符号翻转）
         key = lambda r: r.n_inliers * max(r.template_score, 0.0)
+    elif strategy == "prior_inlier":
+        # 内点数 + λ·稳定先验分（任务 1.2 接入点 B）。prior_info=(axes, g, lam)，
+        # 缺失时退化为纯 inlier（不报错，便于配置对照）。
+        if prior_info is None:
+            key = lambda r: r.n_inliers
+        else:
+            axes, g, lam = prior_info
+            key = lambda r: (r.n_inliers
+                             + lam * stable_prior_score(r.R, axes, g))
     else:
         raise ValueError(f"未知择优策略: {strategy}")
     return sorted(pool, key=key, reverse=True)

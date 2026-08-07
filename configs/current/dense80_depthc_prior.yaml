@@ -1,0 +1,7 @@
+# 任务 1.2 接入点 B：稳定摆放先验软评分（score = inlier + λ·prior）
+base: dense80_depthc_guided.yaml
+
+solver:
+  selection: prior_inlier
+  stable_prior: true
+  prior_lambda: 0.5

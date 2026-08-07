@@ -1,0 +1,3 @@
+base: dense80_depthc_prior.yaml
+solver:
+  prior_lambda: 0.1
