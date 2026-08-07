@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sys
 import time
+import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -662,6 +663,27 @@ class PoseEstimator:
                 return None
             crop, mask_crop, crop_box_used, (s_leg_x, s_leg_y) = lc
         else:
+            # 掩码边界腐蚀（6d-weak-objects 机制验证）：FastSAM 掩码边界
+            # 像素误当前景参与 MASt3R 匹配 → 对应噪声（gt_mask 上界 +5.84
+            # 全部归因掩码/crop 内容，候选池消融已排除排序因素）。腐蚀后
+            # 重算外接框 + expand 0.2，与 GT 掩码路线同构（localize.py:87）。
+            erode = int(d_cfg.get("mask_erode", 0) or 0)
+            if erode > 0 and self._loc_mode not in ("gt_mask", "gt_bbox"):
+                import cv2
+                m = cv2.erode(loc.mask.astype(np.uint8),
+                              np.ones((erode, erode), np.uint8)).astype(bool)
+                if m.sum() < 16:
+                    return None
+                ys, xs = np.nonzero(m)
+                bbox = (int(xs.min()), int(ys.min()),
+                        int(xs.max() - xs.min() + 1),
+                        int(ys.max() - ys.min() + 1))
+                h, w = img_rgb_u8.shape[:2]
+                from .detection.localize import expand_bbox
+                loc = dataclasses.replace(
+                    loc, mask=m,
+                    crop_box=expand_bbox(
+                        bbox, float(d_cfg.get("bbox_expand", 0.2)), w, h))
             x0, y0, x1, y1 = loc.crop_box
             crop = img_rgb_u8[y0:y1, x0:x1]
             mask_crop = loc.mask[y0:y1, x0:x1]

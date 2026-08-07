@@ -1,0 +1,6 @@
+# 掩码边界腐蚀机制验证（6d-weak-objects）：FastSAM 掩码腐蚀 3px + bbox 重算
+# 预期：若边界像素对应噪声是 gt_mask +5.84 的来源，腐蚀后 ADD 应显著回升
+base: dense80_depthc_guided.yaml
+
+detection:
+  mask_erode: 3
