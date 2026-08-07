@@ -28,6 +28,8 @@
 | dense80_depthc.yaml / dense80_dc2_t02.yaml / dense80_dc2_t02g20.yaml | done | dc2 调参过程 |
 | dense80_guided.yaml | done | guided 单测（D 类 +4.2 均值）|
 | dense80_norefine.yaml / dense80_depthc_norefine.yaml | current | refine 两档对比的"关"档（P4 #82）|
+| dense80_depthc_gtmask.yaml | running | gt_mask 定位上界（duck +5.84 / can +5.0 → 定位是瓶颈；ape/cat/holepuncher 扩展在跑）|
+| dense80_depthc_sam.yaml | dead | SAM ViT-H 对照判负（duck +0.83 ADD / -3.33 Proj，缺口在检测级）|
 | dense80_depthc_mh.yaml / dense80_tzsearch.yaml / dense80_batch16.yaml / dense80_depth03_w1.yaml | archived | 过程变体 |
 | legacy_mypose.yaml | archived | 旧管线复刻对照（README §8 口径警告）|
 | experiments/dense80_gtmask.yaml | current | GT 掩码检索上界分析 |
