@@ -20,7 +20,8 @@
 | task1-2-prior-insert | done | 1 | 接入点 B：`src/solver/selection.py` prior 项（A 判死）| `experiments/runs/task1-2-prior-insert.md` | 稳定先验软评分（score = inlier + λ·prior）能否提升弱物体？| 4 弱物体 ADD ≥+2mm 且 can 不降（±1mm）| **判负**：duck -6.67 / holepuncher -5.83 / cat +3.33 / ape +0.83（平均 -2.08）；机制=联合 PnP 吞择优 + 本底 18-20° 使 prior 重叠；死因"先验与失败帧错配" |
 | 6d-loc-upper | done | 1 | `configs/current/dense80_depthc_gtmask.yaml` + `dense80_depthc_sam.yaml` | `experiments/runs/6d-loc-upper.md` | FastSAM 分割是否是弱物体瓶颈（gt_mask 上界下 ADD 提升多少）？| gt_mask 下 duck ADD ≥ +5 → 定位是瓶颈 | **结案**：4/5 弱物体定位侧瓶颈（holepuncher +9.17/cat +7.5/duck +5.84/can +5.0），ape 唯一匹配侧例外（-1.67）；SAM 对照判负（掩码 IoU 0.914 vs 0.910 几乎相同）；6d-weak-objects 分流：duck/cat/holepuncher 检测侧，ape 匹配侧 |
 | 6d-cand-pool | done | 1 | `configs/current/dense80_depthc_mast3r.yaml`（fastsam 掩码 + 全解码）| `experiments/runs/6d-cand-pool.md` | duck 残余 5.0 差距是否来自候选池来源（DINOv2 top-40 vs MASt3R sim top-40）？| mast3r ranking ADD 接近 gt_mask（39.17）→ 候选池是瓶颈，治预筛 | **结案：候选池非瓶颈**——mast3r 33.33 与主链完全持平；gt_mask +5.84 全部归因掩码/crop 内容（边界像素对应噪声）；下一步掩码腐蚀实验 |
-| 6d-weak-objects | todo | 2 | 待定 | `experiments/runs/6d-weak-objects.md` | duck/ape/cat 失败帧（proj<5px 占 70%）有无训练/锚点级修复？| 任一弱项 +5，MEAN 不降 | 上界量化分流：duck/cat/holepuncher 检测侧（候选池/掩码），ape 匹配侧 |
+| 6d-mask-erode | running | 1 | `configs/current/dense80_depthc_erode.yaml`（mask_erode 1/3px）| `experiments/runs/6d-mask-erode.md` | FastSAM 掩码溢出背景环（面积比 1.02-1.08、有效对应少 11%）能否用边界腐蚀修复？| 腐蚀后 ADD 回升接近 gt_mask（39.17）→ 掩码后处理可落地 | erode3 已判负（26.67 崩盘）；erode1 甜点档在跑 |
+| 6d-weak-objects | todo | 2 | 待定 | `experiments/runs/6d-weak-objects.md` | duck/ape/cat 失败帧（proj<5px 占 70%）有无训练/锚点级修复？| 任一弱项 +5，MEAN 不降 | 上界量化分流：duck/cat/holepuncher 检测侧（掩码后处理候选），ape 匹配侧 |
 | 6d-tracking-speed | blocked | 3 | 待新增 | `experiments/runs/6d-tracking-speed.md` | 上帧位姿初始化能否把 7.1s/frame 降到 <1s？| 速度 <1s/frame 且 ADD 下降可解释 | 需要先定 tracking 协议 |
 
 ## 已完成（历史记录，勿重跑）
