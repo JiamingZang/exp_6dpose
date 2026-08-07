@@ -1,0 +1,6 @@
+# 反向交叉实验：GT bbox（crop 内容精确）+ fastsam 掩码像素
+# 预期：若 ≈ gt_mask(39.17) → bbox/crop 是全部贡献 → 检测侧改进 = bbox 精化
+base: dense80_depthc_guided.yaml
+
+detection:
+  use_gt_bbox_for_crop: true

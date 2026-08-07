@@ -659,6 +659,22 @@ class PoseEstimator:
             loc = dataclasses.replace(
                 loc, mask=np.asarray(gt_mask, dtype=bool))
 
+        # ---- 反向交叉：GT bbox（crop 内容） + fastsam 掩码像素 ----
+        if (bool(d_cfg.get("use_gt_bbox_for_crop", False))
+                and gt_mask is not None and self._loc_mode != "gt_mask"):
+            gm = np.asarray(gt_mask, dtype=bool)
+            ys, xs = np.nonzero(gm)
+            if len(xs) < 16:
+                return None
+            bbox = (int(xs.min()), int(ys.min()),
+                    int(xs.max() - xs.min() + 1),
+                    int(ys.max() - ys.min() + 1))
+            h, w = img_rgb_u8.shape[:2]
+            from .detection.localize import expand_bbox
+            loc = dataclasses.replace(
+                loc, crop_box=expand_bbox(
+                    bbox, float(d_cfg.get("bbox_expand", 0.2)), w, h))
+
         # ---- 裁剪（context_pad = 默认；tight_square = 历史对照口径）----
         if self._crop_mode == "tight_square":
             from .detection.localize import legacy_square_crop
