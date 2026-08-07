@@ -1300,37 +1300,47 @@ class PoseEstimator:
             K_crop = K_query.copy()
             K_crop[0, 2] -= x0
             K_crop[1, 2] -= y0
-            # 渲染校验触发过补救且补救后 IoU 仍低（候选池无好位姿）：
-            # 单次精化大概率困在错误盆地，改用多假设精化——对当前位姿
-            # 扰动出多个种子各自短精化，按渲染对齐损失选最优盆地，再
-            # 由 LPIPS 主 refiner 收尾（借鉴旧 MyPose refine.py 的
-            # generate_hypotheses + run_search_stage 思想）
-            if (rs_triggered and rs_iou < float(s_cfg.get(
-                    "multi_hypo_iou", 0.3))
-                    and self._hypo_refiner is not None):
-                R_c, t_c = self._multi_hypothesis_refine(
-                    chosen_ex, K_crop, R_c, t_c)
-                R_r, t_r = R_c, t_c
-                timings["multi_hypo"] = time.time() - t0
-            else:
-                R_r, t_r = self._refiner.refine(chosen_ex["crop"],
-                                                chosen_ex["mask_crop"],
-                                                K_crop, R_c, t_c)
-                # 精化回退保护：refiner 损失面 tz 平坦 + 旋转有梯度，常把
-                # 粗位姿推坏（实测负贡献，holepuncher 51.7→36.7）。用渲染
-                # 对齐损失比较精化前后，变差则保留粗位姿。
-                if R_r is not None and self._refiner is not None:
-                    la_before = self._refiner.align_loss(
+            # 任务 3 自适应（solver.adaptive）：按内点数分级——高内点 =
+            # 位姿已可靠，跳过 refiner 直接输出（省 ~7s/帧）；低内点 =
+            # 困难帧，refiner 迭代 boost_iters 倍（升级档）。
+            ad = s_cfg.get("adaptive", {}) or {}
+            ad_on = bool(ad.get("enabled", False))
+            n_inl = getattr(best, "n_inliers", 0)
+            skip_refine = ad_on and n_inl >= int(ad.get("high", 10 ** 9))
+            boost_iters = (int(ad.get("boost_iters", 0))
+                           if ad_on and n_inl < int(ad.get("low", 0)) else 0)
+            if not skip_refine:
+                # 渲染校验触发过补救且补救后 IoU 仍低（候选池无好位姿）：
+                # 单次精化大概率困在错误盆地，改用多假设精化——对当前位姿
+                # 扰动出多个种子各自短精化，按渲染对齐损失选最优盆地，再
+                # 由 LPIPS 主 refiner 收尾（借鉴旧 MyPose refine.py 的
+                # generate_hypotheses + run_search_stage 思想）
+                if (rs_triggered and rs_iou < float(s_cfg.get(
+                        "multi_hypo_iou", 0.3))
+                        and self._hypo_refiner is not None):
+                    R_c, t_c = self._multi_hypothesis_refine(
+                        chosen_ex, K_crop, R_c, t_c)
+                    R_r, t_r = R_c, t_c
+                    timings["multi_hypo"] = time.time() - t0
+                else:
+                    R_r, t_r = self._refiner.refine(
                         chosen_ex["crop"], chosen_ex["mask_crop"],
-                        K_crop, R_c, t_c)
-                    la_after = self._refiner.align_loss(
-                        chosen_ex["crop"], chosen_ex["mask_crop"],
-                        K_crop, R_r, t_r)
-                    if la_after > la_before:
-                        R_r, t_r = R_c, t_c
-            if R_r is not None:
-                R_out, t_out = self._to_model_frame(R_r, t_r)
-            timings["refine"] = time.time() - t0
+                        K_crop, R_c, t_c, iterations=boost_iters or None)
+                    # 精化回退保护：refiner 损失面 tz 平坦 + 旋转有梯度，
+                    # 常把粗位姿推坏（实测负贡献，holepuncher 51.7→36.7）。
+                    # 用渲染对齐损失比较精化前后，变差则保留粗位姿。
+                    if R_r is not None:
+                        la_before = self._refiner.align_loss(
+                            chosen_ex["crop"], chosen_ex["mask_crop"],
+                            K_crop, R_c, t_c)
+                        la_after = self._refiner.align_loss(
+                            chosen_ex["crop"], chosen_ex["mask_crop"],
+                            K_crop, R_r, t_r)
+                        if la_after > la_before:
+                            R_r, t_r = R_c, t_c
+                if R_r is not None:
+                    R_out, t_out = self._to_model_frame(R_r, t_r)
+                timings["refine"] = time.time() - t0
         refined_R, refined_t = R_out, t_out
 
         # ---- tz 面积比校准（tz_search）：渲染掩码面积 ∝ 1/z²，用

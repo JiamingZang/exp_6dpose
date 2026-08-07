@@ -145,7 +145,7 @@ class PoseRefiner:
     # ------------------------------------------------------------------
     def refine(self, img_rgb_u8: np.ndarray, mask: np.ndarray,
                K: np.ndarray, R0: np.ndarray, t0: np.ndarray,
-               verbose: bool = False):
+               verbose: bool = False, iterations: Optional[int] = None):
         """精化位姿。
 
         Args:
@@ -153,11 +153,13 @@ class PoseRefiner:
             mask: (H,W) bool 前景掩码（与裁剪图同坐标系）
             K: (3,3) 裁剪坐标系内参（主点已平移）
             R0/t0: 初始 w2c 位姿（模型系，mm 单位）
+            iterations: 覆盖构造时的迭代数（任务 3 自适应升级档用）
         Returns:
             (R, t) 精化后的 w2c 位姿；失败（无有效掩码）返回 (None, None)
         """
         if mask.sum() < 16:
             return None, None
+        n_iters = int(iterations) if iterations else self.iterations
         H, W = img_rgb_u8.shape[:2]
         # GT = 真实裁剪图，掩码外涂白（与模板/渲染背景一致）
         gt_np = img_rgb_u8.astype(np.float32) / 255.0
@@ -241,7 +243,7 @@ class PoseRefiner:
         # 收缩保证收敛不震荡（v1 固定 lr 的 Adam 实测常把位姿推坏）。
         delta = torch.zeros(6, device=self.device, requires_grad=True)
         opt = torch.optim.AdamW([delta], lr=self.lr, weight_decay=0.0)
-        total = max(self.iterations, 1)
+        total = max(n_iters, 1)
         warmup = min(self.warmup_steps, total // 2)
         base_lrs = [pg["lr"] for pg in opt.param_groups]
         losses = []                                    # 梯度早停窗口

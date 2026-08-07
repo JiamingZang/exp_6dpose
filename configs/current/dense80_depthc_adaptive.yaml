@@ -1,0 +1,9 @@
+# 任务 3：验证器驱动自适应计算（内点分级）
+base: dense80_depthc_guided.yaml
+
+solver:
+  adaptive:
+    enabled: true
+    high: 30000        # 内点 ≥ 3 万：跳过 refiner 直接输出（省 ~7s/帧）
+    low: 16000         # 内点 < 1.6 万：升级档（refiner 迭代 2 倍）
+    boost_iters: 800   # 升级档 refiner 迭代数（默认 400）
