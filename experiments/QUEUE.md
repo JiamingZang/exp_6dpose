@@ -17,7 +17,7 @@
 | 6d-pointmap-t3 | todo | 3 | 多视角 MASt3R-SfM/VGGT 全局对齐 | `experiments/runs/6d-pointmap-t3.md` | 8-16 模板视角+查询图全局对齐直接读位姿（无 Top-K/PnP/择优）？| ape/duck 120 帧 ADD ≥ 现管线 | 第三档：范式级；依赖第一档验证渲染-真实图 pointmap 域差 |
 | 6d-vggt-recon | done | 2 | sanity test（[模板渲染, 查询裁剪] → VGGT-1B 相对位姿）| `experiments/runs/6d-vggt-recon.md` | VGGT-1B 直接输出查询位姿（c2w，世界系=模板系）能否过域差判据（tz 中位偏离 <3%）？| tz 中位偏离 1.0 <3% 且旋转误差中位 <5° | **判死（1B）**：R_err 中位 94°、tz 反号；同图对 0.02° 但跨视角 145°——跨图位姿回归不可靠非纯域差；Omega（gated 待授权）可用同脚本复跑 |
 | task1-1-stable-prior | done | 1 | `scripts/analysis/stable_pose_prior.py` | 见 EXPERIMENTS.md「任务 1.1」| 测试序列物体是否处于稳定摆放（GT 朝上轴 vs 稳定族共识方向）？| GT 中位角差 >30° 判死 | **通过（判据修正）**：单方向 g* 迭代 + can 本底对照；duck 18.7/cat 15.8/holepuncher 18.0 vs can 20.1（同水平），ape 24.5（40% >30° 软信号）→ 进入任务 1.2 接入点 B（A 判死：模板物体姿态固定，加权无区分度）|
-| task1-2-prior-insert | running | 1 | 接入点 B：`src/solver/selection.py` prior 项（A 判死：模板物体姿态固定，加权恒等）| 见任务清单 | 稳定先验软评分（score = inlier + λ·prior）能否提升弱物体？| 4 弱物体 ADD ≥+2mm 且 can 不降（±1mm）| 离线数据 outputs/stable_prior/<obj>.npz 已就绪；λ 消融 0.1/0.5/1.0 |
+| task1-2-prior-insert | running | 1 | 接入点 B：`src/solver/selection.py` prior 项（A 判死）| 见任务清单 | 稳定先验软评分（score = inlier + λ·prior）能否提升弱物体？| 4 弱物体 ADD ≥+2mm 且 can 不降（±1mm）| 代码就绪 + 离线数据就绪；λ 主档 0.5 先跑，有效再消融 0.1/1.0 |
 | 6d-weak-objects | todo | 2 | 待定 | `experiments/runs/6d-weak-objects.md` | duck/ape/cat 失败帧（proj<5px 占 70%）有无训练/锚点级修复？| 任一弱项 +5，MEAN 不降 | 已确认是匹配精度极限（align 判对率 55%），需换信息源而非测试时微调 |
 | 6d-tracking-speed | blocked | 3 | 待新增 | `experiments/runs/6d-tracking-speed.md` | 上帧位姿初始化能否把 7.1s/frame 降到 <1s？| 速度 <1s/frame 且 ADD 下降可解释 | 需要先定 tracking 协议 |
 
