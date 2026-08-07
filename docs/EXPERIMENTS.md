@@ -540,3 +540,19 @@ iron 89.2(+0.9)，lamp 91.7(-0.8) 例外，其余持平。
   ape 走匹配/对应改进
 - 下一步：duck 残余 5.0 差距拆解（gt_mask+真实检索 / crop 分解），
   定检测改进的具体机制
+
+## 6d-cand-pool：候选池来源消融——候选池非瓶颈（08-08）
+
+- 动机：6d-loc-upper 结案后拆 duck 残余 5.0（SAM 34.17 vs gt_mask 39.17）；
+  主链只解码 DINOv2 CLS top-40/80 模板，gt_mask 全解码 80 后按 MASt3R sim
+  取 top-40——候选池不同源，可能是差距来源
+- 方法：`dense80_depthc_mast3r.yaml`（fastsam 掩码 + template_ranking: mast3r
+  + prescreen: none），与 gt_mask 唯一差异 = 掩码/crop；与主链唯一差异 =
+  候选池来源
+- duck 120 帧：mast3r **33.33/84.17/50.83** vs 主链 33.33/81.67/42.5 vs
+  gt_mask 39.17/85.0/50.0
+- 结论：**候选池来源不是瓶颈**（ADD 完全持平 33.33；Proj +2.5/5cm5° +8.33
+  为全解码的边际收益）→ gt_mask 的 +5.84 全部归因**掩码/crop 内容**：
+  IoU 0.91 的 ~9% 差异像素（边界）→ 匹配对应噪声
+- 下一步：掩码边界腐蚀实验（fastsam 掩码腐蚀 2-3px 排除边界对应，
+  接近 gt_mask 则机制坐实）→ 检测侧改进 = 掩码精化/边界清洗
