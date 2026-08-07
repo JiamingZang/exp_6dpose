@@ -361,7 +361,7 @@ iron 89.2(+0.9)，lamp 91.7(-0.8) 例外，其余持平。
 - 改动：去 LPIPS（lambda_lpips=0）、+MS-SSIM（5 尺度）、+mask 形状监督（L1(alpha,mask)）、
   AdamW + warmup10 + 余弦退火到 0、400 步上限、5 步梯度均值早停、best-delta 回溯
 - 120 帧子集（弱项 5 物体，vs 30k guided 基线）：ape 45.0（持平）/ duck 26.67（-6.6）/
-  holepuncher 46.67（-5.8）/ **cat 55.83（+4.2，唯一正贡献）**；can 待提取完成后评估
+  holepuncher 46.67（-5.8）/ cat 55.83（+4.2）/ can 91.67（持平）——判负确认
 - 诊断（duck 120 帧 coarse/refined 落盘分析）：
   - rv2 优化器本身中性：精化后 ADD 变好 55 帧 / 变差 65 帧
   - 回退保护接受 112 帧中 57 帧真更差（align_loss 判对率 51%）
