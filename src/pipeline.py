@@ -449,6 +449,12 @@ class EstimateResult:
     n_inliers: int = 0
     best_template: int = -1
     timings: Dict[str, float] = field(default_factory=dict)     # 分阶段秒
+    # 精化诊断用（6d-refiner-v2）：refiner 前的粗位姿与 refiner 后、
+    # 回退保护前的精化位姿（同一模型坐标系）。无 refiner 或失败帧为 None。
+    R_coarse: Optional[np.ndarray] = None
+    t_coarse: Optional[np.ndarray] = None
+    R_refined: Optional[np.ndarray] = None
+    t_refined: Optional[np.ndarray] = None
     # return_candidates=True 时按择优判据降序的**全部**候选（含失败项）
     # [{"success","R","t","template_idx","n_inliers","score"}, ...]。
     # 成功项的 t 已换回原始模型单位并做过 VGGT→CAD 对齐，与最终输出同一
@@ -1264,6 +1270,7 @@ class PoseEstimator:
             timings["guided"] = time.time() - t0
 
         R_out, t_out = self._to_model_frame(R_c, t_c)
+        coarse_R, coarse_t = R_out, t_out
         # 测试时位姿精化：在裁剪坐标系渲染 3DGS，对齐真实图（mask 内
         # L1+SSIM+LPIPS），把粗位姿推入局部最优
         if self._refiner is not None:
@@ -1303,6 +1310,7 @@ class PoseEstimator:
             if R_r is not None:
                 R_out, t_out = self._to_model_frame(R_r, t_r)
             timings["refine"] = time.time() - t0
+        refined_R, refined_t = R_out, t_out
 
         # ---- tz 面积比校准（tz_search）：渲染掩码面积 ∝ 1/z²，用
         # 查询掩码面积比迭代校正深度；随后按掩码质心差校正 xy ----
@@ -1362,7 +1370,9 @@ class PoseEstimator:
         return EstimateResult(success=True, R=R_out, t=t_out,
                               n_inliers=chosen.n_inliers,
                               best_template=chosen.template_idx,
-                              timings=timings, candidates=candidates)
+                              timings=timings, candidates=candidates,
+                              R_coarse=coarse_R, t_coarse=coarse_t,
+                              R_refined=refined_R, t_refined=refined_t)
 
     # ------------------------------------------------------------------
     def estimate(self, img_rgb_u8: np.ndarray, K_query: np.ndarray,
@@ -1725,6 +1735,18 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
                 "success": bool(res.success),
                 "R": (res.R.tolist() if res.success else None),
                 "t": (res.t.tolist() if res.success else None),
+                "R_coarse": (res.R_coarse.tolist()
+                             if res.success and res.R_coarse is not None
+                             else None),
+                "t_coarse": (res.t_coarse.tolist()
+                             if res.success and res.t_coarse is not None
+                             else None),
+                "R_refined": (res.R_refined.tolist()
+                              if res.success and res.R_refined is not None
+                              else None),
+                "t_refined": (res.t_refined.tolist()
+                              if res.success and res.t_refined is not None
+                              else None),
                 "n_inliers": int(res.n_inliers),
                 "m": m, "timings": res.timings,
                 "cand_adds": c_adds, "cand_projs": c_projs,
