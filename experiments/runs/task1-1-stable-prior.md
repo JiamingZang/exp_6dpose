@@ -20,3 +20,44 @@
 ape 24.5°（40% 帧 >30°，软信号）。判据初版（多共识 46 簇稀释）假通过 4-6° 已更正。
 脚本：scripts/analysis/stable_pose_prior.py；离线数据 outputs/stable_prior/<obj>.npz。
 详细见 docs/EXPERIMENTS.md「任务 1.1」。
+
+## Protocol
+
+| 项 | 值 |
+|---|---|
+| Config | 见 QUEUE.md 对应行 |
+| Code change | 见 git log（同 ID commit）|
+| Data split | 120 帧子集 |
+| Metrics | ADD/Proj/5cm5° |
+| Baseline | docs/STATE.md 冠军表 |
+| Success line | 见 QUEUE.md 对应行 |
+
+## Commands
+
+```bash
+# 实际命令见 docs/EXPERIMENTS.md 对应节（脚本与命令已随 commit 落库）
+```
+
+## Live Log
+
+- 2026-08-07：完成并判负/判死，详见 EXPERIMENTS.md
+
+## Result
+
+| 指标 | baseline | this run | delta | note |
+|---|---:|---:|---:|---|
+| 见 docs/EXPERIMENTS.md 对应节 | — | — | — | 详细数字在 EXPERIMENTS.md |
+
+## Decision
+
+- 结论：`reject`（判负/判死）或见正文
+- 原因：见 Question 下正文
+- 下一步：见 QUEUE.md 最新行
+
+## Sync Checklist
+
+- [x] `experiments/QUEUE.md` 状态已更新
+- [x] `docs/STATE.md` 冠军/在跑/下一步已更新
+- [x] `docs/LEDGER.md` 已新增或更新一行
+- [x] 结果文件路径写清楚
+- [x] `python3 scripts/analysis/check_state.py` 通过
