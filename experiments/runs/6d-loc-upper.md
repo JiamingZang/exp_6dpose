@@ -57,24 +57,30 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_sam.y
 
 | 物体 | 指标 | fastsam 基线 | gt_mask | delta | SAM | SAM delta | note |
 |---|---|---:|---:|---:|---:|---:|---|
-| duck | ADD | 33.33 | **39.17** | +5.84 | 34.17 | +0.83 | SAM 兑现不了上界 |
-| duck | Proj | 81.67 | **85.0** | +3.33 | 78.33 | **-3.33** | SAM 反而回退 |
+| duck | ADD | 33.33 | **39.17** | +5.84 | 34.17 | +0.83 | 定位侧瓶颈 |
+| duck | Proj | 81.67 | **85.0** | +3.33 | 78.33 | **-3.33** | |
 | duck | 5cm5° | 42.5 | **50.0** | +7.5 | 46.67 | +4.17 | |
-| can | ADD | 91.67 | **96.67** | +5.0 | — | — | 强物体也涨 |
-| can | Proj | 95.83 | **95.83** | 0 | — | — | |
-| can | 5cm5° | 95.83 | **95.83** | 0 | — | — | |
+| can | ADD | 91.67 | **96.67** | +5.0 | — | — | 定位侧（强物体）|
+| cat | ADD | 51.67 | **59.17** | **+7.5** | — | — | 定位侧瓶颈 |
+| ape | ADD | 45.0 | 43.33 | **-1.67** | — | — | **匹配侧瓶颈（唯一例外）** |
+| holepuncher | ADD | 52.5 | **61.67** | **+9.17** | — | — | 定位侧（最大收益）|
 
-结果文件：`outputs/exp_gtmask/results/{duck,can}.json`；`outputs/exp_sam/results/duck.json`；
-gt_mask 扩展：`outputs/exp_gtmask/results/{ape,cat,holepuncher}.json`（08-08 在跑）。
+掩码 IoU（mask_crop 全图对齐）：duck fastsam-GT 0.910 / SAM 0.914（几乎相同）；
+ape <0.5 IoU 36.67%、holepuncher 41.67%（候选掩码大面积选错）——但收益
+与坏掩码占比无关（holepuncher +9.17 vs ape -1.67），ape 例外需匹配侧解释。
+
+结果文件：`outputs/exp_gtmask/results/{duck,can,cat,ape,holepuncher}.json`；
+`outputs/exp_sam/results/duck.json`。
 
 ## Decision
 
-- 结论：`keep`（gt_mask 上界确认定位是瓶颈；SAM 对照**判负**）
-- 原因：duck +5.84 / can +5.0 全部来自掩码质量；但 SAM ViT-H 只兑现
-  +0.83 ADD（Proj 还 -3.33）——缺口在**检测级候选生成**，换更强通用
-  分割器不可行；gt_mask 39.17 留作检测改进的验收锚点
-- 下一步：gt_mask 扩展 ape/cat/holepuncher 量化各弱物体上界 →
-  定 6d-weak-objects 检测侧改进优先级（候选框/掩码生成）
+- 结论：`done`（上界量化完成：**4/5 弱物体定位侧瓶颈**，ape 唯一例外）
+- 原因：duck +5.84 / cat +7.5 / can +5.0 / holepuncher **+9.17** 全部来自
+  GT 掩码；ape -1.67（匹配侧）；SAM 掩码与 fastsam 几乎同质量（0.914 vs
+  0.910），换分割器无收益——检测改进空间 = 掩码/裁剪的"准 GT 化"
+- 下一步：6d-weak-objects 分流——duck/cat/holepuncher 检测侧改进
+  （候选掩码生成/裁剪），ape 匹配/对应侧；duck 残余 5.0 拆解实验
+  （gt_mask+真实检索 / crop 分解）
 
 ## Sync Checklist
 

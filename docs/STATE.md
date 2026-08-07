@@ -1,7 +1,7 @@
 # STATE.md —— 唯一状态源（agent 进来先读这个）
 
 > 更新规则：每轮实验出结果**同一次操作内**更新本文件。
-> 上次更新：2026-08-08（6d-loc-upper：SAM 对照判负，gt_mask 扩展三物体在跑）
+> 上次更新：2026-08-08（6d-loc-upper 结案：4/5 弱物体定位侧瓶颈，ape 匹配侧例外）
 
 ## 冠军（论文主表数字）
 
@@ -21,8 +21,7 @@
 
 | 项 | 说明 |
 |---|---|
-| 6d-loc-upper（在跑，优先级 1）| gt_mask 上界：duck +5.84 / can +5.0 → **定位是瓶颈**；SAM 对照判负（+0.83/-3.33）；gt_mask 扩展 ape/cat/holepuncher 量化上界中 |
-| 6d-weak-objects（待定，优先级 2）| 上界量化后定检测侧改进（候选框/掩码生成）优先级；训练/锚点级修复仍排队 |
+| 6d-weak-objects（优先级 1，方向已定）| **上界量化结案**：duck/cat/holepuncher/can 定位侧瓶颈（gt_mask +5~9.17），ape 唯一匹配侧（-1.67）；duck 残余 5.0 拆解实验（gt_mask+真实检索 / crop 分解）定检测改进机制 |
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
 
