@@ -1,7 +1,7 @@
 # STATE.md —— 唯一状态源（agent 进来先读这个）
 
 > 更新规则：每轮实验出结果**同一次操作内**更新本文件。
-> 上次更新：2026-08-07（全量 13 物体评估完成，MEAN 69.74）
+> 上次更新：2026-08-07（任务 1.1 稳定先验通过 + VGGT-1B sanity 判死 + rv2 收尾）
 
 ## 冠军（论文主表数字）
 
@@ -21,10 +21,13 @@
 
 | 项 | 说明 |
 |---|---|
-| 6d-refiner-v2（排队，优先级 1）| 按 GS-Pose（SSIM+MS-SSIM、去 LPIPS、cosine lr 退火）+ 旧代码（mask_loss 形状主导、best-loss 回溯、多假设）重做 refiner——当前精化净负贡献，最大提升杠杆 |
-| 6d-vggt-recon | VGGT 重建替代/辅助 MASt3R（新模块验证）|
+| task1-2-prior-insert（排队，优先级 1）| 稳定摆放先验软评分接入：接入点 A 模板预筛重排（localize.py）→ B PnP 假设重排（selection.py）；4 弱物体 +2mm 且 can 不降 |
+| 任务 2 查询裁剪超分 | 定位 bbox 裁剪 ×2（bicubic 基线 / Real-ESRGAN）喂 MASt3R；治 M 类病（duck/ape 对应点供给不足）；映射回原图做 PnP |
+| 任务 3 验证器驱动自适应计算 | selection.py 内点数分级（高→直接输出 / 中→标准 / 低→升级档 K 全量+超分+RANSAC 3000）；精度-延迟曲线 |
+| 任务 4 近似对称量化 | duck/ape 网格自对齐扫描 + 失败帧绕对称轴旋转进阈值统计（纯分析，复用任务 1.1 网格代码）|
+| 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 6d-weak-objects | duck/ape/cat/holepuncher 失败帧训练/锚点级修复 |
-| 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章）|
+| 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
 
 ## 黑名单（已证伪/已定型，禁止回退重跑）
 
@@ -36,6 +39,9 @@
 | 全物体统一背景色 | 浅色需黑背景、深色需白背景，单一必崩一边（eggbox 9.2% / driller 61.7%）| 轮 6-8 |
 | 旧表 67.63/80.06/65.13 | 误标背景的废数据，已作废（08-02 晚更正）| §3 更正 |
 | holepuncher 靠 guided_refine | 完全无改善，根因在训练/锚点层 | §3 guided 测试 |
+| VGGT-1B 成对位姿求解（在线）| R_err 中位 94°、tz 反号；同图对 0.02° 但跨视角 145°——跨图位姿回归不可靠（非纯域差）| EXPERIMENTS.md 6d-vggt-recon sanity |
+| MASt3R pointmap 3D-3D 对齐替代 PnP | 成对输出统一系（img1 系），查询相机系 3D 不存在；域差 34% | EXPERIMENTS.md 6d-pointmap-t1 |
+| refiner-v2（GS-Pose/旧代码思路重做）| 判据全失效（duck align_loss/mask_iou 均 ~51%），单起点局部光度优化净负 | EXPERIMENTS.md 6d-refiner-v2 |
 
 ## 已知坑
 

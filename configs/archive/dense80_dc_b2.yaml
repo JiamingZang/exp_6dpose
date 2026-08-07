@@ -1,0 +1,4 @@
+base: ../current/dense80_depthc_guided.yaml
+
+matching:
+  batch_size: 2
