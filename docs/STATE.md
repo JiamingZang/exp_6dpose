@@ -22,6 +22,7 @@
 | 项 | 说明 |
 |---|---|
 | 6d-rng-fix（优先级 0，blocker）| 修 self.rng 流污染（pipeline.py:561 逐帧消耗 + cache 跳帧 → ±6 分抖动）；所有 120 帧实验的前置 |
+| 6d-det-align（优先级 1）| GSPose 对齐口径：换 YOLOv5 检测框喂管线 + 核对评测帧集（我们=BOP test 14968 帧）；双口径汇报（检测框口径 vs 无检测器端到端）|
 | 6d-weak-objects（优先级 1）| 候选池反转后续：全解码全物体验证 + 不降速的预筛修复（两阶段筛选见 6d-prescreen2）|
 | 6d-prescreen2（优先级 1）| 两阶段候选筛选（DINOv2 top-80 → MASt3R 精排 top-40）——粗位姿章创新点候选 |
 | 6d-iter-align（优先级 2）| 迭代稠密渲染对齐 sanity——位姿优化章创新点候选 |
