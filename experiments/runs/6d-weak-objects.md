@@ -57,15 +57,33 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_guide
 ## Live Log
 
 - `08-08 11:40`：开工（6d-rng-fix 结案后首项）
-- `08-08 11:40`：启动 4 物体全解码提取（后台，~3h）
+- `08-08 11:40`：启动 4 物体全解码提取（后台，~3h，实际 ~2.5h）
+- `08-08 14:30`：提取完成（4×120 主帧 + alt 候选文件）
+- `08-08 15:00`：mast3r2 评估完成（从 matches 直解）
 
 ## Result
 
-待出。
+| 物体 | 基线（dinov2 top-40）| 全解码（sim top-40）| ΔADD |
+|---|---:|---:|---:|
+| duck | 30.83 | **37.5** | **+6.67** |
+| ape | 47.5 | 46.67 | -0.83 |
+| cat | 53.33 | 50.83 | **-2.5** |
+| holepuncher | 50.83 | 50.0 | -0.83 |
+
+基线文件：`outputs/exp_weakobj/results/{ape,cat,holepuncher}_base.json`；
+duck 基线 = `outputs/exp_rngfix/results/duck_a.json`（30.83）。
+全解码：`outputs/exp_weakobj/results/{duck,ape,cat,holepuncher}_mast3r2.json`。
+全部 120 帧子集、rng-fix 后新口径、逐帧确定性。
 
 ## Decision
 
-待出。
+- 结论：`done`（**候选池收益不泛化**）
+- 原因：旧口径 duck +5.0 是新口径 duck +6.67（复现），但 ape/cat/holepuncher
+  全解码全部平/负（-0.83/-2.5/-0.83）——全解码扩候选池**只在 duck 有效**，
+  推测与 duck 重复纹理导致 DINOv2 CLS 排名错误集中有关；对一般弱物体
+  扩大解码窗口甚至有害（cat -2.5）。候选池不构成一般性瓶颈
+- 下一步：6d-prescreen2 判负收尾（两阶段只兑现 duck 一半收益，且收益本身
+  不泛化）；粗位姿章创新点转向；6d-iter-align（位姿优化章）为下一验证点
 
 ## Sync Checklist
 

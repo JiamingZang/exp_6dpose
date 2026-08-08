@@ -40,15 +40,23 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_p2.ya
 ## Live Log
 
 - `08-08 11:50`：代码 + 配置就绪（192 测试通过），等 6d-weak-objects 提取完成
-  （GPU 串行）后验证
+- `08-08 15:05`：duck 验证跑完（GPU 串行等待后）
 
 ## Result
 
-待出。
+duck 120 帧：两阶段 60→40 = **34.17/80.83/42.5**；同口径对照：
+基线 dinov2 top-40 = 30.83；全解码 = 37.5。
+结果文件：`outputs/exp_p2/results/duck.json`。
 
 ## Decision
 
-待出。
+- 结论：`done`（**判负，未达成功线**）
+- 原因：成功线要求 duck ADD ≥ 全解码-1（≥36.5），实测 34.17——两阶段
+  只兑现全解码收益的一半（+3.33 vs +6.67）；且 6d-weak-objects 已证
+  全解码收益本身不泛化（仅 duck，ape/cat/holepuncher 平/负）——
+  候选池类创新点整体被数据否决
+- 下一步：粗位姿章创新点不押在预筛上；代码保留（decode_k 机制无害，
+  可作消融档）；重心转向 6d-iter-align
 
 ## Sync Checklist
 

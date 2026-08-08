@@ -21,13 +21,17 @@
 
 | 项 | 说明 |
 |---|---|
-| 6d-weak-objects（优先级 1）| 候选池反转后续（新口径）：全解码全物体验证（duck 新基线 30.83，旧 +5.0 结论需重验）+ 不降速预筛修复（6d-prescreen2）|
+| 6d-iter-align（优先级 1）| 迭代稠密渲染对齐 sanity——位姿优化章创新点候选（该章最薄；候选池类创新点已被 6d-weak-objects/prescreen2 否决）|
 | 6d-det-align（优先级 1）| GSPose 对齐口径：换 YOLOv5 检测框喂管线 + 核对评测帧集（我们=BOP test 14968 帧）；双口径汇报（检测框口径 vs 无检测器端到端）|
 | 6d-ablation-full（优先级 1）| 论文 §3.3 八组消融全量跑齐（run_ablation.py --all），支撑模板库构建+dc2 方法贡献的消融证据 |
-| 6d-prescreen2（优先级 1）| 两阶段候选筛选（DINOv2 top-80 → MASt3R 精排 top-40）——粗位姿章创新点候选 |
-| 6d-iter-align（优先级 1）| 迭代稠密渲染对齐 sanity——位姿优化章创新点候选（该章最薄，优先试）|
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
+
+## 已结案（08-08 候选池系列）
+
+- 6d-weak-objects：全解码收益**不泛化**（duck +6.67 复现，ape/cat/holepuncher 平/负）——候选池非一般性瓶颈
+- 6d-prescreen2：两阶段预筛判负（duck 34.17，只兑现一半收益）；代码保留作消融档
+- 新口径基线（120 帧子集，rng-fix 后）：duck 30.83 / ape 47.5 / cat 53.33 / holepuncher 50.83
 
 ## 黑名单（已证伪/已定型，禁止回退重跑）
 
