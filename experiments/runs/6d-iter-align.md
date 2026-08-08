@@ -56,6 +56,8 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia.ya
 - `08-08 19:20`：复现验证（新 cache）ADD/Proj 一致，5cm5° 差 1 帧
   （gsplat 光栅化浮点噪声，~1e-4 级位姿差，非 rng 流问题）
 - `08-08 20:00`：ape 泛化 **59.17（+11.67）**——非 duck 特例
+- `08-08 20:40`：cat/holepuncher/can 泛化 **全正**（+10.83/+5.83/+5.83）——
+  **5/5 物体全部提升，无回归**
 
 ## Result
 
@@ -63,22 +65,24 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia.ya
 |---|---:|---:|---:|---:|
 | duck | 30.83/81.67/40.83 | **47.50/81.67/62.50** | **+16.67** | +21.67 |
 | ape | 47.5/87.5/55.83 | **59.17/89.17/74.17** | **+11.67** | +18.33 |
+| cat | 53.33/85.83/63.33 | **64.17/87.5/79.17** | **+10.83** | +15.83 |
+| holepuncher | 50.83/83.33/65.0 | **56.67/85.0/75.83** | **+5.83** | +10.83 |
+| can | 93.33/95.0/92.5 | **99.17/97.5/99.17** | **+5.83** | +6.67 |
 
-结果文件：`outputs/exp_ia/results/{duck,duck_re,ape}.json`；
-基线：`outputs/exp_rngfix/results/duck_a.json`、`outputs/exp_weakobj/results/ape_base.json`。
+结果文件：`outputs/exp_ia/results/{duck,duck_re,ape,cat,holepuncher,can}*.json`、
+`outputs/exp_weakobj/results/{ape,cat,holepuncher,can}_base.json`。
 120 帧子集、rng-fix 后新口径。单帧额外代价 ~0.5s（2 轮渲染+解码）。
 
 ## Decision
 
-- 结论：`done`（**通过，位姿优化章核心机制**）
+- 结论：`done`（**通过，位姿优化章核心机制，5/5 泛化**）
 - 原因：当前位姿重渲染消除了"离线模板视角 ≠ 查询真实视角"的系统偏差，
   渲染↔查询匹配的对应质量随迭代提升（正反馈）；接受/拒绝门保证好帧
-  不被推偏（Proj 不变即证据）。坏帧救援集中在"可恢复类"（粗位姿偏移
-  30-100mm 但渲染仍重叠），灾难帧（完全错位）无救
+  不被推偏（Proj 全部持平或微升）。坏帧救援集中在"可恢复类"（粗位姿
+  偏移 30-100mm 但渲染仍重叠），灾难帧（完全错位）无救
 - 已知残留：gsplat 光栅化原子累加的 GPU 级浮点不确定（逐帧位姿 1e-4
   级噪声，主指标稳定，5cm5° 偶见 ±1 帧）
-- 下一步：cat/holepuncher/can 泛化验证 + 迭代轮数/采样数消融（论文
-  优化章消融表）
+- 下一步：迭代轮数消融（iters 1/2/3）→ 全 13 物体 champion 升级评估
 
 ## Sync Checklist
 

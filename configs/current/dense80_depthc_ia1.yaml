@@ -1,0 +1,6 @@
+# 迭代渲染对齐（6d-iter-align）：粗位姿处重渲染 → MASt3R 再匹配 → 重解 PnP
+# 与主链唯一差异 = 在 guided_refine 之后追加迭代渲染对齐（iters=2）
+base: dense80_depthc_guided.yaml
+
+solver:
+  iter_align_iters: 1
