@@ -576,3 +576,30 @@ iron 89.2(+0.9)，lamp 91.7(-0.8) 例外，其余持平。
   扩大候选 K（排名太深）、形态学（腐蚀判负）、检索排序（mast3r 判无关）
 - **检测侧方向封顶**：duck 上界 +5.84 = 坏帧 ~4 分（不可修）+ 边界精度
   ~2 分（不可复现）——6d-weak-objects 检测侧结案，剩余 ape 匹配侧
+
+## 6d-tau-scan + 基线复现性事故——6d-cand-pool 结论反转（08-08，重要更正）
+
+- 起因：LEDGER 挂账项 dc2 tau 敏感性（0.02/0.08/0.10）扫描，duck 用
+  matches13_30k + 新 cache 重评估
+- **事故发现**：tau 02/08/10 全 26.67；tau 0.05 复跑（guided + 新 cache）
+  = **27.5**——"基线 33.33/81.67/42.5"不复现！（任务 3 记录里 adaptive
+  27.5 vs 基线 33.33 的 -5.83 判负同样可疑）
+- 机制：evaluate 逐帧 solve 消耗 pipeline self.rng（seed 0）全局流（多假设
+  扰动/refiner），cache 命中的帧跳过 solve 不消耗 rng → 不同 cache 状态 =
+  不同 rng 流 = 后续帧扰动种子不同 → 120 帧子集抖动达 ±6 分
+  （33.33 vs 27.5 = 7 帧差异）。**历史所有"新 cache vs 旧 cache"对比
+  都可能被污染**；PnP 内部 default_rng(0) 确定，污染源只在 self.rng 流
+- **反转验证**：guided 配置 + matches13_mast3r（全解码 80 取 sim top-40）
+  + 新 cache = **32.5/84.17/50.0** vs guided + matches13_30k（DINOv2 top-40）
+  + 新 cache = 27.5/81.67/41.67 → **候选池来源差 +5.0**！
+  6d-cand-pool"候选池非瓶颈"结论**反转**：DINOv2 预筛把正确模板挤出
+  top-40（80 模板库只解码 40）→ 5 分损失；当时"持平"是基线 33.33
+  （cache 污染）与 mast3r 33.33 的巧合相等
+- **修正后的干净基线**（matches13_30k + guided + 新 cache）：duck **27.5**
+  → gt_mask 上界 39.17 = **+11.67**（原报 +5.84 低估）；SAM 34.17 仍判负
+  （+6.67 vs 干净基线，但距离上界仍 5.0）；腐蚀/交叉结论方向不变（基线
+  同源，相对差异可信）
+- 修复方向：**全解码（top_k=80）或改进预筛排序**；速度代价 matching ×2
+  （3.7→7.4s/帧）；ape/cat/holepuncher/can 全解码验证待跑
+- 纪律补丁：评估对比必须**全新 cache 或同 cache 状态**；引用 120 帧数字
+  前先复跑确认（rng 流污染源见 STATE 已知坑）

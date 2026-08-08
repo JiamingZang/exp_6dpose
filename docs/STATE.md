@@ -21,7 +21,7 @@
 
 | 项 | 说明 |
 |---|---|
-| 6d-weak-objects（优先级 1，拆解闭环）| duck 上界拆解完成：候选池无关、腐蚀/交叉全负（掩码+bbox 须同源自洽）；GT +5.84 = ~4 分坏帧候选选择失败（fs 选错候选）+ ~2 分边界精度；下一步验证检索 vs 候选池缺掩码 |
+| 6d-weak-objects（优先级 1，方向反转）| **候选池反转**：全解码 matches 32.5 vs DINOv2 预筛 27.5（duck，新 cache 同口径）——预筛挤出正确模板损失 5 分；全解码收益 + 速度代价验证中；gt_mask 上界修正为 +11.67（干净基线） |
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
 
@@ -63,6 +63,12 @@
   `src/matching/alt_matchers.py:103`、`src/gaussian/gs_trainer.py:227`、
   `src/datasets/ply_io.py:161` 写死 `default_rng(0)`——改 seed 不影响这些环节，
   做 seed 敏感性实验前先接线
+- **评估 cache 状态污染 rng 流（2026-08-08 事故）**：evaluate 逐帧 solve 消耗
+  pipeline self.rng（seed 0）全局流（多假设扰动/refiner），cache 命中的帧
+  跳过 solve 不消耗 rng → 不同 cache 状态 = 不同 rng 流 = 120 帧子集抖动
+  达 ±6 分（duck 33.33 vs 27.5）。**对比评估必须全新 cache 或同 cache 状态**；
+  引用历史 120 帧数字前先复跑确认。PnP 内部 default_rng(0) 确定，污染源
+  只在 self.rng 流（pipeline.py:561）
 - `scripts/data/rebuild_bank_fixed_views.py:32` 前景掩码阈值 `alpha_fg=0.5`
   是函数默认值、调用处未暴露为配置——重建模板库时动它要改代码
 
