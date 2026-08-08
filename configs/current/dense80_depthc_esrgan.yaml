@@ -1,0 +1,5 @@
+# 任务 2 ESRGAN ×2 臂（512 输入）
+base: dense80_depthc_guided.yaml
+
+detection:
+  crop_sr: 2

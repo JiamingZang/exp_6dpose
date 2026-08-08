@@ -1,0 +1,5 @@
+# 任务 2 对照臂：MASt3R 输入分辨率 1024（无超分）——区分"分辨率收益" vs "超分收益"
+base: dense80_depthc_guided.yaml
+
+matching:
+  image_size: 1024

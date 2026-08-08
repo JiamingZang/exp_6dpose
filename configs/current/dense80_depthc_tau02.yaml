@@ -1,0 +1,5 @@
+# dc2 tau 敏感性（LEDGER 挂账项）：depth_consistency 阈值扫描
+base: dense80_depthc_guided.yaml
+
+solver:
+  depth_tau_frac: 0.02

@@ -1,0 +1,8 @@
+# 任务 2 超分臂（修正）：bicubic ×2 + MASt3R 1024 输入——超分信息真正进入模型
+base: dense80_depthc_guided.yaml
+
+detection:
+  crop_sr: 1
+
+matching:
+  image_size: 1024
