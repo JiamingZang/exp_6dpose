@@ -97,7 +97,7 @@ def main():
                 gt_mask = cv2.imread(str(fr.mask_path),
                                      cv2.IMREAD_GRAYSCALE) > 0
             ex = est.extract_matches(img, fr.K, gt_bbox=fr.bbox_visib,
-                                     gt_mask=gt_mask)
+                                     gt_mask=gt_mask, frame_id=fr.frame_id)
             if ex is None:
                 n_fail += 1
                 # 失败帧也落盘（空 matches），阶段 3 据此判定失败

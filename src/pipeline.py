@@ -558,7 +558,10 @@ class PoseEstimator:
         # 模板特征预提取缓存（编码器 token 只算一次，供全部帧复用）
         self.matcher.prepare_templates(bank.images, bank.alphas)
 
-        self.rng = np.random.default_rng(int(cfg["runtime"].get("seed", 0)))
+        self._rng_seed = int(cfg["runtime"].get("seed", 0))
+        self.rng = np.random.default_rng(self._rng_seed)
+        # 无 frame_id 调用（脚本/单帧调试）时的兜底计数器
+        self._rng_counter = 0
 
         # 测试时位姿精化（3DGS 可微渲染 + 感知损失，solver.refine_pose 开关）。
         # 需要 onboard 保存的 3DGS 参数 ckpt；缺 ckpt 时构造即抛错（fail fast）。
@@ -618,8 +621,19 @@ class PoseEstimator:
                                              iterations=0)
 
     # ------------------------------------------------------------------
+    def _frame_rng(self, frame_id):
+        """每帧确定性 rng：种子只依赖帧号（frame_id 派生），cache 命中
+        跳帧不消耗流、也不影响其他帧——评估可复现性与 cache 状态无关。
+
+        frame_id 为 None 时退回调用序计数器（脚本/单帧调试路径）。
+        """
+        if frame_id is None:
+            self._rng_counter += 1
+            return np.random.default_rng(self._rng_seed + self._rng_counter)
+        return np.random.default_rng(self._rng_seed + int(frame_id))
+
     def extract_matches(self, img_rgb_u8: np.ndarray, K_query: np.ndarray,
-                        gt_bbox=None, gt_mask=None):
+                        gt_bbox=None, gt_mask=None, frame_id=None):
         """阶段 2（粗匹配）：定位 → 裁剪 → MASt3R Top-K 稠密对应。
 
         与 estimate() 的求解段解耦：对应产物可落盘（scripts/analysis/extract_matches.py
@@ -629,6 +643,7 @@ class PoseEstimator:
             dict(loc, crop, mask_crop, crop_box_used, s_leg, matches,
                  sxy, timings) 供 _solve() 消费；任一步失败返回 None
         """
+        self.rng = self._frame_rng(frame_id)
         timings: Dict[str, float] = {}
         m_cfg = self.cfg["matching"]
         d_cfg = self.cfg["detection"]
@@ -1181,7 +1196,7 @@ class PoseEstimator:
 
     # ------------------------------------------------------------------
     def _solve(self, ex: Dict, K_query: np.ndarray,
-               return_candidates: bool = False) -> EstimateResult:
+               return_candidates: bool = False, frame_id=None) -> EstimateResult:
         """阶段 3（求解优化）：逐模板 PnP → 择优 → 联合 PnP 精化 → refiner。
 
         消费 extract_matches() 的产物（也可从落盘 npz 重建后传入，见
@@ -1191,6 +1206,10 @@ class PoseEstimator:
         解出位姿后，用 3DGS 前向渲染对齐损失选优——错误候选的 crop 里
         没有目标物体，渲染内容对不上，损失显著更高。
         """
+        if frame_id is not None:
+            # 阶段 3 直解路径（matches_dir）不经 extract_matches，同样按帧
+            # 重置 rng 保证可复现（estimate 路径这里再重置一次同种子流，无害）
+            self.rng = self._frame_rng(frame_id)
         timings = dict(ex["timings"])
         s_cfg = self.cfg["solver"]
         m_cfg = self.cfg["matching"]
@@ -1457,13 +1476,16 @@ class PoseEstimator:
     # ------------------------------------------------------------------
     def estimate(self, img_rgb_u8: np.ndarray, K_query: np.ndarray,
                  gt_bbox=None, gt_mask=None,
-                 return_candidates: bool = False) -> EstimateResult:
+                 return_candidates: bool = False, frame_id=None
+                 ) -> EstimateResult:
         """单帧 6D 位姿估计（阶段 2 extract_matches + 阶段 3 _solve）。"""
         ex = self.extract_matches(img_rgb_u8, K_query,
-                                  gt_bbox=gt_bbox, gt_mask=gt_mask)
+                                  gt_bbox=gt_bbox, gt_mask=gt_mask,
+                                  frame_id=frame_id)
         if ex is None:
             return EstimateResult(success=False, timings={})
-        return self._solve(ex, K_query, return_candidates=return_candidates)
+        return self._solve(ex, K_query, return_candidates=return_candidates,
+                           frame_id=frame_id)
 
     def _to_model_frame(self, R: np.ndarray, t: np.ndarray):
         """PnP 输出 → 原始模型单位 + VGGT→CAD 对齐（最终输出坐标系）。
@@ -1761,11 +1783,13 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
             npz = Path(matches_dir) / f"{fr.frame_id:06d}.npz"
             ex = load_extracted_matches(npz)
             res = estimator._solve(ex, fr.K,
-                                   return_candidates=bool(topk_ks))
+                                   return_candidates=bool(topk_ks),
+                                   frame_id=fr.frame_id)
         else:
             res = estimator.estimate(img, fr.K, gt_bbox=fr.bbox_visib,
                                      gt_mask=gt_mask,
-                                     return_candidates=bool(topk_ks))
+                                     return_candidates=bool(topk_ks),
+                                     frame_id=fr.frame_id)
         if res.success:
             m = evaluate_pose(
                 model_pts, ds.diameter, fr.K, fr.R_gt, fr.t_gt, res.R, res.t,

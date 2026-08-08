@@ -55,7 +55,7 @@ def main():
         if fr.mask_path is not None:
             gt_mask = cv2.imread(str(fr.mask_path), cv2.IMREAD_GRAYSCALE) > 0
         res = estimator.estimate(img, fr.K, gt_bbox=fr.bbox_visib,
-                                 gt_mask=gt_mask)
+                                 gt_mask=gt_mask, frame_id=fr.frame_id)
         records.append(res.timings)
 
     records = records[args.warmup:]

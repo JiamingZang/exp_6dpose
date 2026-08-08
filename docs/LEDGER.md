@@ -30,6 +30,8 @@
 | dense80_norefine.yaml / dense80_depthc_norefine.yaml | current | refine 两档对比的"关"档（P4 #82）|
 | dense80_depthc_gtmask.yaml | done | gt_mask 定位上界结案：4/5 弱物体定位侧瓶颈（holepuncher +9.17/cat +7.5/duck +5.84/can +5.0），ape 匹配侧例外（-1.67）|
 | dense80_depthc_sam.yaml | dead | SAM ViT-H 对照判负（duck +0.83 ADD / -3.33 Proj；掩码 IoU 0.914 vs 0.910 几乎相同）|
+| dense80_depthc_mast3r.yaml | done | 全解码对照：结论反转后=候选池主要瓶颈 +5.0（旧口径 32.5 vs 27.5）；**rng-fix 后旧数字作废，待新口径重验** |
+| rng-fix（代码）| done | 每帧确定性 rng 种子（_frame_rng，frame_id 派生）：全空/半满 cache 逐帧一致（duck 30.83/81.67/40.83）；历史子集数字作废 |
 | dense80_depthc_mh.yaml / dense80_tzsearch.yaml / dense80_batch16.yaml / dense80_depth03_w1.yaml | archived | 过程变体 |
 | legacy_mypose.yaml | archived | 旧管线复刻对照（README §8 口径警告）|
 | experiments/dense80_gtmask.yaml | current | GT 掩码检索上界分析 |

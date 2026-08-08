@@ -21,10 +21,9 @@
 
 | 项 | 说明 |
 |---|---|
-| 6d-rng-fix（优先级 0，blocker）| 修 self.rng 流污染（pipeline.py:561 逐帧消耗 + cache 跳帧 → ±6 分抖动）；所有 120 帧实验的前置 |
+| 6d-weak-objects（优先级 1）| 候选池反转后续（新口径）：全解码全物体验证（duck 新基线 30.83，旧 +5.0 结论需重验）+ 不降速预筛修复（6d-prescreen2）|
 | 6d-det-align（优先级 1）| GSPose 对齐口径：换 YOLOv5 检测框喂管线 + 核对评测帧集（我们=BOP test 14968 帧）；双口径汇报（检测框口径 vs 无检测器端到端）|
 | 6d-ablation-full（优先级 1）| 论文 §3.3 八组消融全量跑齐（run_ablation.py --all），支撑模板库构建+dc2 方法贡献的消融证据 |
-| 6d-weak-objects（优先级 1）| 候选池反转后续：全解码全物体验证 + 不降速的预筛修复（两阶段筛选见 6d-prescreen2）|
 | 6d-prescreen2（优先级 1）| 两阶段候选筛选（DINOv2 top-80 → MASt3R 精排 top-40）——粗位姿章创新点候选 |
 | 6d-iter-align（优先级 1）| 迭代稠密渲染对齐 sanity——位姿优化章创新点候选（该章最薄，优先试）|
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
@@ -68,12 +67,13 @@
   `src/matching/alt_matchers.py:103`、`src/gaussian/gs_trainer.py:227`、
   `src/datasets/ply_io.py:161` 写死 `default_rng(0)`——改 seed 不影响这些环节，
   做 seed 敏感性实验前先接线
-- **评估 cache 状态污染 rng 流（2026-08-08 事故）**：evaluate 逐帧 solve 消耗
-  pipeline self.rng（seed 0）全局流（多假设扰动/refiner），cache 命中的帧
-  跳过 solve 不消耗 rng → 不同 cache 状态 = 不同 rng 流 = 120 帧子集抖动
-  达 ±6 分（duck 33.33 vs 27.5）。**对比评估必须全新 cache 或同 cache 状态**；
-  引用历史 120 帧数字前先复跑确认。PnP 内部 default_rng(0) 确定，污染源
-  只在 self.rng 流（pipeline.py:561）
+- **评估 cache 状态污染 rng 流（已修复 08-08，6d-rng-fix）**：evaluate 逐帧
+  solve 曾消耗 pipeline self.rng（seed 0）全局流，cache 命中帧跳过 solve 不
+  消耗 rng → 不同 cache 状态 = 不同 rng 流 = 120 帧子集抖动 ±6 分（duck
+  33.33 vs 27.5）。修复：每帧 `default_rng(seed + frame_id)`（_frame_rng），
+  种子只依赖帧号；全空/半满 cache 逐帧一致（duck 30.83/81.67/40.83）。
+  **rng-fix 前的历史 120 帧子集数字全部作废**；PnP 内部 default_rng(0)
+  确定，无流问题
 - `scripts/data/rebuild_bank_fixed_views.py:32` 前景掩码阈值 `alpha_fg=0.5`
   是函数默认值、调用处未暴露为配置——重建模板库时动它要改代码
 
