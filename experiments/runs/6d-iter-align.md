@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-iter-align` |
 | Owner | `agent` |
-| Status | `running` |
+| Status | `done` |
 | Started | `2026-08-08 17:20` |
-| Finished | `<empty>` |
+| Finished | `2026-08-08 20:40（泛化+消融结案；champion 全量评估由 6d-iter-align-ext 承接）` |
 | Queue row | `experiments/QUEUE.md::6d-iter-align` |
 
 ## Question

@@ -6,9 +6,9 @@
 |---|---|
 | ID | `<实验ID>` |
 | Owner | `<agent/user>` |
-| Status | `planned/running/done/dead/blocked` |
-| Started | `<YYYY-MM-DD HH:MM>` |
-| Finished | `<YYYY-MM-DD HH:MM 或 empty>` |
+| Status | `done` |
+| Started | `unknown（补记）` |
+| Finished | `2026-08-07（结案 commit 8c4f8e9）` |
 | Queue row | `experiments/QUEUE.md::<实验ID>` |
 
 ## Question

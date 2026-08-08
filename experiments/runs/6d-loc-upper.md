@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-loc-upper` |
 | Owner | `agent` |
-| Status | `running` |
+| Status | `done` |
 | Started | `2026-08-07 22:40` |
-| Finished | `<YYYY-MM-DD HH:MM 或 empty>` |
+| Finished | `2026-08-08（结案 commit 10d1ecf）` |
 | Queue row | `experiments/QUEUE.md::6d-loc-upper` |
 
 ## Question

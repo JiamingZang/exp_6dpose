@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-30k-can-coordbank` |
 | Owner | `<agent/user>` |
-| Status | `planned` |
-| Started | `` |
-| Finished | `` |
+| Status | `done` |
+| Started | `unknown（补记）` |
+| Finished | `2026-08-04（结案，commit 2dfe5fe 后）` |
 | Queue row | `experiments/QUEUE.md::6d-30k-can-coordbank` |
 
 ## Question

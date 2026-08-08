@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-weak-objects` |
 | Owner | `agent` |
-| Status | `running` |
+| Status | `done` |
 | Started | `2026-08-08 11:40` |
-| Finished | `<empty>` |
+| Finished | `2026-08-08 15:00` |
 | Queue row | `experiments/QUEUE.md::6d-weak-objects` |
 
 ## Question

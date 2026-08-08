@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-mask-erode` |
 | Owner | `agent` |
-| Status | `running` |
+| Status | `done` |
 | Started | `2026-08-08 03:50` |
-| Finished | `<empty>` |
+| Finished | `2026-08-08（结案 commit caec86d）` |
 | Queue row | `experiments/QUEUE.md::6d-mask-erode` |
 
 ## Question

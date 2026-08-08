@@ -6,7 +6,7 @@
 |---|---|
 | ID | `6d-refiner-v2` |
 | Owner | agent |
-| Status | `planned` |
+| Status | `done` |
 | Started | empty |
 | Finished | empty |
 | Queue row | `experiments/QUEUE.md::6d-refiner-v2` |

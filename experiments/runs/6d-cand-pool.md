@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-cand-pool` |
 | Owner | `agent` |
-| Status | `running` |
+| Status | `done` |
 | Started | `2026-08-08 02:10` |
-| Finished | `<empty>` |
+| Finished | `2026-08-08（结论反转更正 08-08，commit 955a105）` |
 | Queue row | `experiments/QUEUE.md::6d-cand-pool` |
 
 ## Question

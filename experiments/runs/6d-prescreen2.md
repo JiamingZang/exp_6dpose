@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-prescreen2` |
 | Owner | `agent` |
-| Status | `todo` |
-| Started | `<empty>` |
-| Finished | `<empty>` |
+| Status | `done` |
+| Started | `2026-08-08 11:50` |
+| Finished | `2026-08-08 15:05` |
 | Queue row | `experiments/QUEUE.md::6d-prescreen2` |
 
 ## Question

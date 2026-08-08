@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-rng-fix` |
 | Owner | `agent` |
-| Status | `running` |
+| Status | `done` |
 | Started | `2026-08-08 10:20` |
-| Finished | `<empty>` |
+| Finished | `2026-08-08 11:30` |
 | Queue row | `experiments/QUEUE.md::6d-rng-fix` |
 
 ## Question
