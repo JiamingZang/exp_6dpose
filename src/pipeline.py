@@ -1096,6 +1096,135 @@ class PoseEstimator:
         return None
 
     # ------------------------------------------------------------------
+    def _iter_align(self, ex: Dict, K_query: np.ndarray,
+                    R: np.ndarray, t: np.ndarray):
+        """迭代渲染对齐（6d-iter-align）：在当前位姿处重渲染 3DGS 新视角，
+        与查询裁剪重做 MASt3R 稠密对应 → 渲染深度反投影到模型系 → 重解
+        PnP，迭代 iter_align_iters 轮。位姿越准渲染越像真图 → 域差随迭代
+        收缩 → 对应质量递增（首轮匹配是在离线模板视角上做的，当前位姿
+        渲染视角天然更接近查询视角）。接受/拒绝：渲染对齐损失变差回退。
+        """
+        s_cfg = self.cfg["solver"]
+        iters = int(s_cfg.get("iter_align_iters", 0) or 0)
+        if iters <= 0 or self._refiner is None:
+            return R, t
+        import cv2
+        from .matching.mast3r_wrapper import _resize_to_multiple16
+        from .matching.correspondence import mutual_nn_matches
+        from .solver.ransac_pnp import ransac_pnp
+
+        x0, y0, _, _ = ex["crop_box_used"]
+        K_crop = K_query.copy()
+        K_crop[0, 2] -= x0
+        K_crop[1, 2] -= y0
+        q_img, (sx, sy) = _resize_to_multiple16(
+            ex["crop"], self.matcher.long_side)
+        K512 = K_crop.copy()
+        K512[0] *= sx
+        K512[1] *= sy
+        q_mask = cv2.resize(
+            ex["mask_crop"].astype(np.uint8),
+            (q_img.shape[1], q_img.shape[0]),
+            interpolation=cv2.INTER_NEAREST).astype(bool)
+
+        Rc = np.asarray(R, dtype=np.float64)
+        tc = np.asarray(t, dtype=np.float64)
+        device = self._refiner.device
+        import os as _os
+        dbg = _os.environ.get("ITER_ALIGN_DEBUG") == "1"
+        for it in range(iters):
+            rgb, alpha, depth = self._refiner.render_rgbd(
+                torch.tensor(Rc, dtype=torch.float32, device=device),
+                torch.tensor(tc, dtype=torch.float32, device=device),
+                torch.tensor(K512, dtype=torch.float32, device=device),
+                q_img.shape[1], q_img.shape[0])
+            rend_mask = alpha > 0.5
+            if dbg:
+                print(f"[iter_align {it}] rend_mask={rend_mask.sum()} "
+                      f"depth_valid={(depth>1e-3).sum()} "
+                      f"q_mask={q_mask.sum()}", flush=True)
+            if rend_mask.sum() < 16:
+                break
+            fq, pq, sq = self.matcher._encode(q_img)
+            fr, pr, sr = self.matcher._encode(rgb)
+            with torch.no_grad():
+                dec1, dec2 = self.matcher.model._decoder(fq, pq, fr, pr)
+                with torch.autocast("cuda", enabled=False):
+                    res1 = self.matcher.model._downstream_head(
+                        1, [tok.float() for tok in dec1], sq)
+                    res2 = self.matcher.model._downstream_head(
+                        2, [tok.float() for tok in dec2], sr)
+            desc_q = res1["desc"][0].reshape(-1, res1["desc"].shape[-1])
+            desc_r = res2["desc"][0].reshape(-1, res2["desc"].shape[-1])
+            ys_q, xs_q = np.nonzero(q_mask)
+            ys_r, xs_r = np.nonzero(rend_mask)
+            if len(ys_q) < 16 or len(ys_r) < 16:
+                break
+            # 采样上限：全量互最近邻是 Nq×Nr 点积，小物体上万前景像素时
+            # 单帧几十 GB 内存（事故 08-08）——与 matcher n_score_pixels 同纪律
+            n_max = int(self.cfg["matching"].get("n_sample_corr", 4096))
+            if len(ys_q) > n_max:
+                sub = self.rng.choice(len(ys_q), n_max, replace=False)
+                ys_q, xs_q = ys_q[sub], xs_q[sub]
+            if len(ys_r) > n_max:
+                sub = self.rng.choice(len(ys_r), n_max, replace=False)
+                ys_r, xs_r = ys_r[sub], xs_r[sub]
+            flat_q = ys_q * q_img.shape[1] + xs_q
+            flat_r = ys_r * rgb.shape[1] + xs_r
+            iq, ir, _ = mutual_nn_matches(
+                desc_q[torch.tensor(flat_q, device=device)].float().cpu().numpy(),
+                desc_r[torch.tensor(flat_r, device=device)].float().cpu().numpy())
+            if dbg:
+                print(f"[iter_align {it}] corr={len(iq)}", flush=True)
+            if len(iq) < 8:
+                break
+            # 渲染深度反投影 → 相机系 3D → 模型系（渲染位姿 w2c 逆变换）
+            z = depth[ys_r[ir], xs_r[ir]]
+            valid = (z > 1e-3) & np.isfinite(z)
+            if dbg:
+                print(f"[iter_align {it}] depth_valid_corr={valid.sum()}", flush=True)
+            if valid.sum() < 8:
+                break
+            pix_q = np.stack([xs_q[iq][valid], ys_q[iq][valid]],
+                             axis=1).astype(np.float64)
+            u = xs_r[ir][valid].astype(np.float64)
+            v = ys_r[ir][valid].astype(np.float64)
+            z = z[valid]
+            fx, fy = K512[0, 0], K512[1, 1]
+            cx, cy = K512[0, 2], K512[1, 2]
+            Xc = np.stack([(u - cx) / fx * z, (v - cy) / fy * z, z], axis=1)
+            Xm = (Rc.T @ (Xc - tc).T).T
+            res = ransac_pnp(
+                pix_q, Xm, K512,
+                reproj_px=float(s_cfg.get("ransac_reproj_px", 5.0)),
+                confidence=float(s_cfg.get("ransac_confidence", 0.999)),
+                iterations=int(s_cfg.get("ransac_iterations", 1000)),
+                refine_lm=True,
+                min_correspondences=6,
+                flag=str(s_cfg.get("pnp_flag", "epnp")))
+            if res is None or not res.success:
+                if dbg:
+                    print(f"[iter_align {it}] pnp FAIL", flush=True)
+                break
+            if dbg:
+                print(f"[iter_align {it}] pnp inl={res.n_inliers} "
+                      f"dR={np.linalg.norm(res.R - Rc):.4f} "
+                      f"dt={np.linalg.norm(res.t - tc):.2f}", flush=True)
+            Rc, tc = res.R, res.t
+        # 接受/拒绝：渲染对齐损失变差回退粗位姿（与 guided_refine 同纪律）
+        if self._verifier is not None:
+            l_before = self._verifier.align_loss(
+                ex["crop"], ex["mask_crop"], K_crop, R, t)
+            l_after = self._verifier.align_loss(
+                ex["crop"], ex["mask_crop"], K_crop, Rc, tc)
+            if dbg:
+                print(f"[iter_align] accept: before={l_before:.4f} "
+                      f"after={l_after:.4f}", flush=True)
+            if l_after > l_before:
+                return R, t
+        return Rc, tc
+
+    # ------------------------------------------------------------------
     def _guided_refine(self, ex: Dict, K_query: np.ndarray,
                        R: np.ndarray, t: np.ndarray):
         """引导式对应精化：粗位姿投影 → 局部窗口 desc 重匹配 → PnP 迭代。
@@ -1357,6 +1486,15 @@ class PoseEstimator:
             else:
                 R_c, t_c = R_g, t_g
             timings["guided"] = time.time() - t0
+
+        # ---- 迭代渲染对齐（6d-iter-align）：当前位姿重渲染新视角 →
+        # MASt3R 再匹配 → 重解 PnP（接受/拒绝逻辑在 _iter_align 内部）----
+        if int(s_cfg.get("iter_align_iters", 0) or 0) > 0:
+            t0 = time.time()
+            R_i, t_i = self._iter_align(chosen_ex, K_query, R_c, t_c)
+            if not (np.allclose(R_i, R_c) and np.allclose(t_i, t_c)):
+                R_c, t_c = R_i, t_i
+            timings["iter_align"] = time.time() - t0
 
         R_out, t_out = self._to_model_frame(R_c, t_c)
         coarse_R, coarse_t = R_out, t_out

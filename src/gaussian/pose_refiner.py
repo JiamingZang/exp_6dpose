@@ -143,6 +143,38 @@ class PoseRefiner:
         return composed, alpha
 
     # ------------------------------------------------------------------
+    def render_rgbd(self, R: torch.Tensor, t: torch.Tensor,
+                    K: torch.Tensor, width: int, height: int):
+        """任意位姿渲染 RGB+深度（6d-iter-align 迭代渲染对齐用）。
+
+        返回 (rgb_u8, alpha, depth)：rgb_u8 (H,W,3) uint8（背景已填
+        bg_color），alpha (H,W) float32，depth (H,W) float32 为相机系 z
+        （gsplat RGB+D 的累计 z，无高斯覆盖的背景像素为 0）。
+        """
+        viewmat = torch.eye(4, device=self.device)
+        viewmat[:3, :3] = R
+        viewmat[:3, 3] = t
+        colors = torch.cat([self.splats["sh0"], self.splats["shN"]], dim=1)
+        renders, alphas, _ = self.gsplat.rasterization(
+            means=self.splats["means"],
+            quats=self.splats["quats"],
+            scales=torch.exp(self.splats["scales"]),
+            opacities=torch.sigmoid(self.splats["opacities"]),
+            colors=colors,
+            viewmats=viewmat[None], Ks=K.clone()[None],
+            width=width, height=height,
+            sh_degree=self.sh_degree, packed=False,
+            render_mode="RGB+D",
+        )
+        rgb = renders[0][..., :3].clamp(0, 1)
+        depth = renders[0][..., 3]
+        alpha = alphas[0]
+        composed = rgb * alpha + (1.0 - alpha) * self.bg_color
+        return ((composed * 255).round().byte().cpu().numpy(),
+                alpha[..., 0].cpu().numpy(),
+                depth.cpu().numpy())
+
+    # ------------------------------------------------------------------
     def refine(self, img_rgb_u8: np.ndarray, mask: np.ndarray,
                K: np.ndarray, R0: np.ndarray, t0: np.ndarray,
                verbose: bool = False, iterations: Optional[int] = None):

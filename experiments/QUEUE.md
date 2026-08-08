@@ -25,7 +25,7 @@
 | 6d-ablation-full | todo | 1 | `configs/ablations/*.yaml`（8 组，`scripts/eval/run_ablation.py --all`）| `experiments/runs/6d-ablation-full.md` | 论文 §3.3 八组消融（topk/几何/尺度/渲染器等，02/05/06/08 组需重建模板库）全量跑齐，支撑模板库构建+dc2 两个方法贡献的消融证据 | 8 组 × 13 物体数字落 outputs/ablation_<name>.json，入论文表 | 前置 6d-rng-fix（干净 cache）；已有子集数字优先但需全量口径复跑 |
 | 6d-weak-objects | done | 1 | `dense80_depthc_mast3r.yaml`（全解码）vs `dense80_depthc_guided.yaml`（基线）| `experiments/runs/6d-weak-objects.md` | rng-fix 新口径下全解码（MASt3R sim top-40）在 4 弱物体上是否仍系统性优于 DINOv2 预筛 top-40？| 任一弱物体全解码 ADD ≥ 基线 +3 | **结案（不泛化）**：duck +6.67 复现，ape/cat/holepuncher 全平/负（-0.83/-2.5/-0.83）——候选池仅 duck 有效，非一般性瓶颈；新口径基线 ape 47.5/cat 53.33/holepuncher 50.83 |
 | 6d-prescreen2 | done | 1 | `dense80_depthc_p2.yaml`（top_k_prescreen: 60）| `experiments/runs/6d-prescreen2.md` | 两阶段候选筛选（DINOv2 粗召回 60 → MASt3R 精排 top-40）能否以 1.5× 解码代价兑现候选池收益？| duck ADD ≥ 全解码-1 且 matching 耗时居中 | **判负**：duck 34.17（只兑现全解码 37.5 的一半收益），且收益本身不泛化；代码保留作消融档 |
-| 6d-iter-align | todo | 1 | 待新增（refiner 迭代模式）| `experiments/runs/6d-iter-align.md` | 迭代稠密渲染对齐（当前位姿重渲染→MASt3R 再匹配→重解 PnP，2-3 轮）能否把精化从净负转正？| duck/ape ADD ≥+3 且无大类崩溃 | 位姿优化章创新点候选（升优先级：位姿优化章目前最薄，此方向最可能产出正创新点）；位姿越准渲染越像真图→域差随迭代收缩；先 sanity 单帧可视化再上量 |
+| 6d-iter-align | running | 1 | `dense80_depthc_ia.yaml`（iter_align_iters: 2）| `experiments/runs/6d-iter-align.md` | 迭代稠密渲染对齐（当前位姿重渲染→MASt3R 再匹配→重解 PnP）能否把精化从净负转正、救回可恢复类坏帧？| duck/ape ADD ≥+3 且无大类崩溃 | 坏帧 sanity 已验证救援能力（117:111→1.8mm / 592:53→3.8mm）；全量评估中 |
 | 6d-tracking-speed | blocked | 3 | 待新增 | `experiments/runs/6d-tracking-speed.md` | 上帧位姿初始化能否把 7.1s/frame 降到 <1s？| 速度 <1s/frame 且 ADD 下降可解释 | 需要先定 tracking 协议 |
 
 ## 已完成（历史记录，勿重跑）
