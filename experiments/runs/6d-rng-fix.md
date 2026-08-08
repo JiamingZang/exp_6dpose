@@ -21,7 +21,7 @@
 
 | 项 | 值 |
 |---|---|
-| Config | `configs/current/dense80_depthc_guided.yaml`（champion，验证用 duck）|
+| Config | `dense80_depthc_guided.yaml`（champion，验证用 duck）|
 | Code change | `src/pipeline.py`：`_frame_rng()` 辅助 + `extract_matches/estimate/_solve` 接 `frame_id`，评估循环传 `fr.frame_id` |
 | Data split | 120 帧子集（duck）|
 | Metrics | ADD(S)@0.1d / Proj@5px / 5cm5° |
