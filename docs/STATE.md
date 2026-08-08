@@ -21,7 +21,7 @@
 
 | 项 | 说明 |
 |---|---|
-| 6d-iter-align 泛化+消融（优先级 1）| 已结案核心机制（duck +16.67 / ape +11.67）；待 cat/holepuncher/can 泛化验证 + 迭代轮数/采样数消融（论文优化章消融表）|
+| 6d-iter-align-ext（优先级 1，在跑）| iter_align 全物体验证（cat/holepuncher/can）+ 迭代轮数消融；duck/ape 已通过（+16.67/+11.67）|
 | 6d-det-align（优先级 1）| GSPose 对齐口径：换 YOLOv5 检测框喂管线 + 核对评测帧集（我们=BOP test 14968 帧）；双口径汇报（检测框口径 vs 无检测器端到端）|
 | 6d-ablation-full（优先级 1）| 论文 §3.3 八组消融全量跑齐（run_ablation.py --all），支撑模板库构建+dc2 方法贡献的消融证据 |
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
