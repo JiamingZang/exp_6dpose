@@ -23,9 +23,10 @@
 |---|---|
 | 6d-rng-fix（优先级 0，blocker）| 修 self.rng 流污染（pipeline.py:561 逐帧消耗 + cache 跳帧 → ±6 分抖动）；所有 120 帧实验的前置 |
 | 6d-det-align（优先级 1）| GSPose 对齐口径：换 YOLOv5 检测框喂管线 + 核对评测帧集（我们=BOP test 14968 帧）；双口径汇报（检测框口径 vs 无检测器端到端）|
+| 6d-ablation-full（优先级 1）| 论文 §3.3 八组消融全量跑齐（run_ablation.py --all），支撑模板库构建+dc2 方法贡献的消融证据 |
 | 6d-weak-objects（优先级 1）| 候选池反转后续：全解码全物体验证 + 不降速的预筛修复（两阶段筛选见 6d-prescreen2）|
 | 6d-prescreen2（优先级 1）| 两阶段候选筛选（DINOv2 top-80 → MASt3R 精排 top-40）——粗位姿章创新点候选 |
-| 6d-iter-align（优先级 2）| 迭代稠密渲染对齐 sanity——位姿优化章创新点候选 |
+| 6d-iter-align（优先级 1）| 迭代稠密渲染对齐 sanity——位姿优化章创新点候选（该章最薄，优先试）|
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
 
