@@ -3,4 +3,4 @@
 base: dense80_depthc_guided.yaml
 
 detection:
-  mask_erode: 3
+  mask_erode: 1

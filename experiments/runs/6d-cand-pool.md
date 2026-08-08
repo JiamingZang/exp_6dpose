@@ -56,13 +56,15 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_mast3
 
 ## Decision
 
-- 结论：`done`（**候选池来源不是瓶颈**）
-- 原因：mast3r ranking（fastsam 掩码 + 全解码 80 取 sim top-40）ADD 与主链
-  完全相同（33.33）——DINOv2 预筛 top-40 与 MASt3R sim top-40 的候选池
-  对最终结果等价；gt_mask 的 +5.84 全部归因**掩码/crop 内容**（IoU 0.91
-  的 ~9% 差异像素 → 匹配对应噪声），与模板排序无关
-- 下一步：掩码边界腐蚀实验（fastsam 掩码腐蚀 2-3px 排除边界对应噪声，
-  接近 gt_mask 则机制坐实）→ 检测侧改进 = 掩码精化/边界清洗
+- 结论：`done`（**结论已反转，见更正**）
+- **更正（08-08，cache/rng 污染事故复跑）**：首跑 33.33"与主链持平"
+  是污染基线下的幽灵结论。干净 cache 复跑：全解码 mast3r ranking
+  **32.5** vs DINOv2 预筛干净复跑 **27.5** → **候选池是主要瓶颈，+5.0**
+  （DINOv2 预筛把正确模板挤出 top-40）。gt_mask 上界同步修正为
+  +11.67（对干净基线 27.5）。出处：docs/EXPERIMENTS.md「基线复现性事故」、
+  commit 955a105
+- 下一步：6d-weak-objects（全解码全物体验证 + 不降速的预筛修复）；
+  前置先修 rng 流污染（pipeline.py:561 self.rng 逐帧消耗 + cache 跳帧）
 
 ## Sync Checklist
 
