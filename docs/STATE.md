@@ -21,17 +21,19 @@
 
 | 项 | 说明 |
 |---|---|
-| 6d-iter-align（优先级 1）| 迭代稠密渲染对齐 sanity——位姿优化章创新点候选（该章最薄；候选池类创新点已被 6d-weak-objects/prescreen2 否决）|
+| 6d-iter-align 泛化+消融（优先级 1）| 已结案核心机制（duck +16.67 / ape +11.67）；待 cat/holepuncher/can 泛化验证 + 迭代轮数/采样数消融（论文优化章消融表）|
 | 6d-det-align（优先级 1）| GSPose 对齐口径：换 YOLOv5 检测框喂管线 + 核对评测帧集（我们=BOP test 14968 帧）；双口径汇报（检测框口径 vs 无检测器端到端）|
 | 6d-ablation-full（优先级 1）| 论文 §3.3 八组消融全量跑齐（run_ablation.py --all），支撑模板库构建+dc2 方法贡献的消融证据 |
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
 
-## 已结案（08-08 候选池系列）
+## 已结案（08-08 迭代渲染对齐）
 
-- 6d-weak-objects：全解码收益**不泛化**（duck +6.67 复现，ape/cat/holepuncher 平/负）——候选池非一般性瓶颈
-- 6d-prescreen2：两阶段预筛判负（duck 34.17，只兑现一半收益）；代码保留作消融档
-- 新口径基线（120 帧子集，rng-fix 后）：duck 30.83 / ape 47.5 / cat 53.33 / holepuncher 50.83
+- **6d-iter-align 通过**：duck 30.83→47.50（+16.67）/ ape 47.5→59.17（+11.67），
+  5cm5° 双双 +18~21；单帧 +0.5s；复现性 OK（gsplat 浮点噪声 ±1 帧）——
+  **位姿优化章核心机制**（当前位姿重渲染 → MASt3R 再匹配 → 重解 PnP，
+  接受/拒绝门保护）
+- 候选池系列结案：6d-weak-objects 全解码收益不泛化；6d-prescreen2 判负
 
 ## 黑名单（已证伪/已定型，禁止回退重跑）
 
@@ -78,6 +80,10 @@
   种子只依赖帧号；全空/半满 cache 逐帧一致（duck 30.83/81.67/40.83）。
   **rng-fix 前的历史 120 帧子集数字全部作废**；PnP 内部 default_rng(0)
   确定，无流问题
+- **gsplat 光栅化浮点不确定（08-08 记录）**：光栅化原子累加顺序 GPU 级
+  不确定 → 逐帧位姿 1e-4 级噪声、refiner 轨迹微扰；主指标（ADD/Proj）
+  跨次稳定，5cm5° 偶见 ±1 帧（0.83 分）。与 rng 流污染（±6 分）不同，
+  属可接受残留；对比实验取主指标判断
 - `scripts/data/rebuild_bank_fixed_views.py:32` 前景掩码阈值 `alpha_fg=0.5`
   是函数默认值、调用处未暴露为配置——重建模板库时动它要改代码
 
