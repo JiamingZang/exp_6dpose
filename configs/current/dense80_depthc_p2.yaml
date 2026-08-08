@@ -1,0 +1,6 @@
+# 两阶段预筛（6d-prescreen2）：DINOv2 CLS 粗召回 60 → MASt3R sim 精排 top-40
+# 与主链唯一差异 = 解码窗口从 40 扩到 60 + 按 sim(m) 重排（速度 1.5×，远小于全解码 2×）
+base: dense80_depthc_guided.yaml
+
+matching:
+  top_k_prescreen: 60

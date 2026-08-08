@@ -59,7 +59,8 @@ def _resize_to_multiple16(img: np.ndarray, long_side: int):
 
 
 def decode_template_indices(n_tmpl: int, top_k: int,
-                            prefilter_order: Optional[np.ndarray] = None
+                            prefilter_order: Optional[np.ndarray] = None,
+                            decode_k: Optional[int] = None
                             ) -> List[int]:
     """决定本帧需要过 MASt3R 解码的模板下标（Top-K 预筛语义）。
 
@@ -67,13 +68,18 @@ def decode_template_indices(n_tmpl: int, top_k: int,
       模板，再按 sim(m) 选 Top-K——省不了算力；
     - prefilter_order 给定（template_ranking=dinov2，默认）：定位阶段的
       DINOv2 相似度排序已选出候选，只解码前 min(top_k, M) 个，K<M 时真正
-      省下 (M-K) 次成对解码与 PnP。
+      省下 (M-K) 次成对解码与 PnP；
+    - decode_k（两阶段预筛，6d-prescreen2）：DINOv2 粗召回 decode_k 个
+      （> top_k），再由 MASt3R sim(m) 精排取 top_k 个做稠密对应——以
+      多解码 (decode_k-top_k) 次为代价，把 DINOv2 CLS 排名错误挤出的
+      正确模板捞回来（cand-pool 反转 +5.0 的机制）。
     """
     if prefilter_order is None:
         return list(range(n_tmpl))
     order = [int(i) for i in np.asarray(prefilter_order).ravel()
              if 0 <= int(i) < n_tmpl]
-    return order[:min(top_k, n_tmpl)]
+    k = decode_k if decode_k is not None else top_k
+    return order[:min(k, n_tmpl)]
 
 
 def resolve_prefilter_order(prescreen: str, template_ranking: str,
@@ -269,8 +275,12 @@ class Mast3rMatcher:
         scores = np.full(n_tmpl, -np.inf)
         desc_cache = {}      # template_idx -> (desc_q_fg, desc_t_fg, pix_t)
 
-        # DINOv2 预筛时只解码 Top-K 个模板（K<M 真正省算）
-        decode_idxs = decode_template_indices(n_tmpl, top_k, prefilter_order)
+        # DINOv2 预筛时只解码 Top-K 个模板（K<M 真正省算）；
+        # top_k_prescreen > top_k 时为两阶段预筛（6d-prescreen2）：粗召回
+        # 更多模板解码，再按 MASt3R sim(m) 精排回 top_k（见 decode_template_indices）
+        decode_k = int(self.cfg.get("top_k_prescreen", top_k))
+        decode_idxs = decode_template_indices(
+            n_tmpl, top_k, prefilter_order, decode_k=decode_k)
 
         # ---- 第一遍：待解码模板批量解码 + 打分，desc 暂存 CPU fp16 ----
         # 记录 top1 模板的稠密 desc（查询全图 + 模板前景），供 solve 阶段
@@ -310,11 +320,12 @@ class Mast3rMatcher:
                 del desc_q, desc_t, dq, dt, sim_sub, p3_q, p3_t
 
         # ---- 第二遍：Top-K 稠密互最近邻 + cycle 过滤 + 阈值 + 采样 ----
-        if prefilter_order is not None:
+        if prefilter_order is not None and decode_k <= top_k:
             # DINOv2 排序即 Top-K，保持其顺序（已只解码这 K 个）
             order = np.array(decode_idxs, dtype=int)
         else:
-            # MASt3R 排序：全解码后按 sim(m) 取 Top-K
+            # 全解码（prefilter_order=None）或两阶段预筛（decode_k > top_k）：
+            # 在已解码集合上按 MASt3R sim(m) 取 Top-K
             order = np.argsort(-scores)[:min(top_k, n_tmpl)]
         geom_on = bool(self.cfg.get("geom_filter", True))
         geom_tau = float(self.cfg.get("geom_tau_frac", 0.08))
