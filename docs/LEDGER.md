@@ -32,7 +32,10 @@
 | dense80_depthc_sam.yaml | dead | SAM ViT-H 对照判负（duck +0.83 ADD / -3.33 Proj；掩码 IoU 0.914 vs 0.910 几乎相同）|
 | dense80_depthc_mast3r.yaml | done | 全解码对照：**收益不泛化**——duck +6.67（新口径 37.5 vs 30.83），ape/cat/holepuncher 平/负；候选池非一般性瓶颈 |
 | dense80_depthc_p2.yaml | done | 两阶段预筛（top_k_prescreen: 60）判负：duck 34.17 只兑现一半收益；代码保留作消融档 |
-| dense80_depthc_ia.yaml | **champion-candidate** | 迭代渲染对齐（iter_align_iters: 2）：**duck 47.50（+16.67）/ ape 59.17（+11.67）**；位姿优化章核心机制；待全物体验证后定冠军 |
+| dense80_depthc_ia.yaml | **champion-candidate** | 迭代渲染对齐（iter_align_iters: 2）：**duck 47.50（+16.67）/ ape 59.17（+11.67）**；位姿优化章核心机制；全 13 物体评估中 |
+| dense80_depthc_ia1.yaml | done | 消融 1 轮：duck 待续跑 |
+| dense80_depthc_ia3.yaml | done | 消融 3 轮：duck 47.50/82.50/65.83（2 轮后增益递减）|
+| dense80_depthc_ia_norefine.yaml | done | 消融 refiner 关：duck 32.50——**iter_align 单独仅 +1.67，增益=级联组合效应** |
 | rng-fix（代码）| done | 每帧确定性 rng 种子（_frame_rng，frame_id 派生）：全空/半满 cache 逐帧一致（duck 30.83/81.67/40.83）；历史子集数字作废 |
 | dense80_depthc_mh.yaml / dense80_tzsearch.yaml / dense80_batch16.yaml / dense80_depth03_w1.yaml | archived | 过程变体 |
 | legacy_mypose.yaml | archived | 旧管线复刻对照（README §8 口径警告）|

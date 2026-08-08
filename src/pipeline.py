@@ -1130,19 +1130,13 @@ class PoseEstimator:
         Rc = np.asarray(R, dtype=np.float64)
         tc = np.asarray(t, dtype=np.float64)
         device = self._refiner.device
-        import os as _os
-        dbg = _os.environ.get("ITER_ALIGN_DEBUG") == "1"
-        for it in range(iters):
+        for _ in range(iters):
             rgb, alpha, depth = self._refiner.render_rgbd(
                 torch.tensor(Rc, dtype=torch.float32, device=device),
                 torch.tensor(tc, dtype=torch.float32, device=device),
                 torch.tensor(K512, dtype=torch.float32, device=device),
                 q_img.shape[1], q_img.shape[0])
             rend_mask = alpha > 0.5
-            if dbg:
-                print(f"[iter_align {it}] rend_mask={rend_mask.sum()} "
-                      f"depth_valid={(depth>1e-3).sum()} "
-                      f"q_mask={q_mask.sum()}", flush=True)
             if rend_mask.sum() < 16:
                 break
             fq, pq, sq = self.matcher._encode(q_img)
@@ -1174,15 +1168,11 @@ class PoseEstimator:
             iq, ir, _ = mutual_nn_matches(
                 desc_q[torch.tensor(flat_q, device=device)].float().cpu().numpy(),
                 desc_r[torch.tensor(flat_r, device=device)].float().cpu().numpy())
-            if dbg:
-                print(f"[iter_align {it}] corr={len(iq)}", flush=True)
             if len(iq) < 8:
                 break
             # 渲染深度反投影 → 相机系 3D → 模型系（渲染位姿 w2c 逆变换）
             z = depth[ys_r[ir], xs_r[ir]]
             valid = (z > 1e-3) & np.isfinite(z)
-            if dbg:
-                print(f"[iter_align {it}] depth_valid_corr={valid.sum()}", flush=True)
             if valid.sum() < 8:
                 break
             pix_q = np.stack([xs_q[iq][valid], ys_q[iq][valid]],
@@ -1203,13 +1193,7 @@ class PoseEstimator:
                 min_correspondences=6,
                 flag=str(s_cfg.get("pnp_flag", "epnp")))
             if res is None or not res.success:
-                if dbg:
-                    print(f"[iter_align {it}] pnp FAIL", flush=True)
                 break
-            if dbg:
-                print(f"[iter_align {it}] pnp inl={res.n_inliers} "
-                      f"dR={np.linalg.norm(res.R - Rc):.4f} "
-                      f"dt={np.linalg.norm(res.t - tc):.2f}", flush=True)
             Rc, tc = res.R, res.t
         # 接受/拒绝：渲染对齐损失变差回退粗位姿（与 guided_refine 同纪律）
         if self._verifier is not None:
@@ -1217,9 +1201,6 @@ class PoseEstimator:
                 ex["crop"], ex["mask_crop"], K_crop, R, t)
             l_after = self._verifier.align_loss(
                 ex["crop"], ex["mask_crop"], K_crop, Rc, tc)
-            if dbg:
-                print(f"[iter_align] accept: before={l_before:.4f} "
-                      f"after={l_after:.4f}", flush=True)
             if l_after > l_before:
                 return R, t
         return Rc, tc

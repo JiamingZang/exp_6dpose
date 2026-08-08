@@ -84,6 +84,21 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia.ya
   级噪声，主指标稳定，5cm5° 偶见 ±1 帧）
 - 下一步：迭代轮数消融（iters 1/2/3）→ 全 13 物体 champion 升级评估
 
+## 消融（08-08 晚，duck 120 帧）
+
+| 配置 | iter_align | refiner | ADD | Proj | 5cm5° | 单帧 |
+|---|---|---:|---:|---:|---:|---:|
+| 基线 | 关 | 开 | 30.83 | 81.67 | 40.83 | ~7s |
+| ia1 | 1 轮 | 开 | 待出 | | | |
+| ia2 | 2 轮 | 开 | **47.50** | 81.67 | 62.50 | ~7.5s |
+| ia3 | 3 轮 | 开 | **47.50** | 82.50 | 65.83 | ~8s |
+| ianr | 2 轮 | **关** | **32.50** | 80.83 | 37.50 | ~6s |
+
+**机制结论（组合效应）**：iter_align 单独只 +1.67（ianr）——+16.67 的
+增益来自级联：iter_align 把粗位姿推进正确盆地，refiner 再从好初始点
+精细抛光。两者互补（几何对应"导航" + 光度"抛光"），缺一不可。
+ia2→ia3 增益递减（5cm5° +3.33），2 轮为性价比甜点。
+
 ## Sync Checklist
 
 - [ ] `experiments/QUEUE.md` 状态已更新

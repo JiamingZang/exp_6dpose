@@ -1,0 +1,6 @@
+# 6d-iter-align 替代 refiner 消融：iter_align 开、光度 refiner 关
+# 验证 iter_align 能否顶替 6s/帧 的可微渲染优化（速度章卖点）
+base: dense80_depthc_ia.yaml
+
+solver:
+  refine_pose: false
