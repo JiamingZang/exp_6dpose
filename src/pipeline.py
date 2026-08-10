@@ -1748,6 +1748,32 @@ def load_extracted_matches(npz_path) -> Dict:
     return ex
 
 
+def _load_cache_records(cp: Path, meta: Dict) -> Dict[int, Dict]:
+    """读取缓存 jsonl（meta 校验 + 逐行帧指纹校验），返回 {frame_id: rec}。
+
+    文件不存在 / 空 / meta 不匹配时返回空 dict（不抛错，调用方决定
+    是否重定向到指纹专属文件）。
+    """
+    import json as _json
+    out: Dict[int, Dict] = {}
+    if not cp.exists() or cp.stat().st_size == 0:
+        return out
+    lines = cp.read_text().splitlines()
+    head = _json.loads(lines[0]) if lines and lines[0].strip() else None
+    if not head or head.get("__meta__") != meta:
+        return out
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+        try:
+            rec = _json.loads(line)
+            if rec.get("cfg_hash") == meta["cfg_hash"]:
+                out[int(rec["frame_id"])] = rec
+        except (KeyError, ValueError, TypeError):
+            pass
+    return out
+
+
 def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
                     max_frames: int = 0, verbose: bool = True,
                     exclude_refs: bool = True,
@@ -1836,23 +1862,23 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
         # 帧级指纹隔离：缓存文件可能被不同配置的追加写污染（refine2 追加
         # dc2 事故，08-04）。meta 不匹配时绝不追加进同一文件，而是写到
         # <stem>_<hash8>.jsonl 独立文件；读时逐行校验帧自身指纹。
+        cp_matched = False
         if cp.exists() and cp.stat().st_size > 0:
-            lines = cp.read_text().splitlines()
-            head = _json.loads(lines[0]) if lines and lines[0].strip() else None
-            if head and head.get("__meta__") == meta:
-                for line in lines[1:]:
-                    if not line.strip():
-                        continue
-                    try:
-                        rec = _json.loads(line)
-                        if rec.get("cfg_hash") == meta["cfg_hash"]:
-                            cache[int(rec["frame_id"])] = rec
-                    except (KeyError, ValueError, TypeError):
-                        pass
-            else:
-                # 污染/异指纹文件：物理隔离到指纹专属文件，不碰原文件
+            head_lines = cp.read_text().splitlines()
+            head = (_json.loads(head_lines[0])
+                    if head_lines and head_lines[0].strip() else None)
+            cp_matched = bool(head and head.get("__meta__") == meta)
+        if cp_matched:
+            cache.update(_load_cache_records(cp, meta))
+        else:
+            if cp.exists() and cp.stat().st_size > 0:
+                # 污染/异指纹文件：物理隔离到指纹专属文件，不碰原文件。
+                # 重定向目标若已有内容（上一轮已重定向过）同样要加载，
+                # 否则中断重启会把已缓存帧全部重跑一遍
+                # （lamp/phone 全量 ia 评估重复处理事故，08-10）。
                 h8 = meta["cfg_hash"][:8]
                 cp = cp.with_name(f"{cp.stem}_{h8}.jsonl")
+                cache.update(_load_cache_records(cp, meta))
         cache_fh = open(cp, "a")
         if cp.stat().st_size == 0:
             cache_fh.write(_json.dumps({"__meta__": meta}) + "\n")

@@ -1,39 +1,44 @@
 # STATE.md —— 唯一状态源（agent 进来先读这个）
 
 > 更新规则：每轮实验出结果**同一次操作内**更新本文件。
-> 上次更新：2026-08-08（队列清理：pointmap t2/t3 判死清出；cand-pool 反转结论同步；下一步=rng 污染修复→全解码全物体验证）
+> 上次更新：2026-08-10（6d-iter-align-ext 结案：13/13 全正，级联 champion 78.07；缓存重定向续跑缺陷修复）
 
 ## 冠军（论文主表数字）
 
 | 项 | 值 |
 |---|---|
 | 数据 | LineMod 13 物体 × **全量 14968 帧**（排除参考帧）|
-| **MEAN** | **ADD 69.74 / Proj 83.77 / 5cm5° 68.69**（回退保护：refiner 精化前后渲染对齐损失择优）|
+| **粗位姿 MEAN** | **ADD 69.74 / Proj 83.77 / 5cm5° 68.69**（回退保护：refiner 精化前后渲染对齐损失择优）|
+| **级联 MEAN（iter_align 2 轮 + 抛光，champion）** | **ADD 78.07 / Proj 87.17 / 5cm5° 81.31**（13/13 全正，+1.55~+18.57，按帧加权 +8.34）|
 | 子集对照 | 120 帧子集 71.55（08-05 口径，全量 -1.8 属正常衰减）|
 | 基线对照 | 无 dc2：67.44 / 81.54 / 66.54；旧代码 MyPose top1：49.49 / 59.22（端到端可比）|
-| 配置 | `configs/current/dense80_depthc_guided.yaml` + 回退保护（refine 变差回退粗位姿）；can 92.58 追平 GSPose 单项 |
+| 配置 | 粗位姿 `configs/current/dense80_depthc_guided.yaml`；级联 `dense80_depthc_ia.yaml`（深色物体 `dense80_w1_ia.yaml`）；均可微抛光（回退保护）|
 | 模板库 | dense80（fibonacci 16 视角 × 5 平面内旋转，512×512），固定视图 + 逆深度锚点 |
 | 训练背景 | 按物体亮度：浅色黑背景（depth 0.6）、深色白背景（driller/cam）|
-| 外部目标 | GSPose 92.0（YOLOv5 检测框口径），差 22.3；缺口集中在 duck 32.3/ape 42.5/cat 51.3/holepuncher 44.5 |
-| 结果 | `outputs/exp_full/results/*.json`（14968 帧全量）|
+| 外部目标 | GSPose 92.0（YOLOv5 检测框口径），级联后差 13.9；多数物体已超 90% 量级 |
+| 结果 | 粗位姿 `outputs/exp_full/results/*.json`；级联 `outputs/exp_full_ia/results/*.json`（14968 帧全量）|
 
 ## 在跑 / 待办
 
 | 项 | 说明 |
 |---|---|
-| 6d-iter-align-ext（优先级 1，在跑）| iter_align 全物体验证（cat/holepuncher/can）+ 迭代轮数消融；duck/ape 已通过（+16.67/+11.67）|
 | 6d-det-align（优先级 1）| GSPose 对齐口径：换 YOLOv5 检测框喂管线 + 核对评测帧集（我们=BOP test 14968 帧）；双口径汇报（检测框口径 vs 无检测器端到端）|
 | 6d-ablation-full（优先级 1）| 论文 §3.3 八组消融全量跑齐（run_ablation.py --all），支撑模板库构建+dc2 方法贡献的消融证据 |
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
 
-## 已结案（08-08 迭代渲染对齐）
+## 已结案（08-10 迭代渲染对齐全量）
 
 - **6d-iter-align 通过**：duck 30.83→47.50（+16.67）/ ape 47.5→59.17（+11.67），
   5cm5° 双双 +18~21；单帧 +0.5s；复现性 OK（gsplat 浮点噪声 ±1 帧）——
   **位姿优化章核心机制**（当前位姿重渲染 → MASt3R 再匹配 → 重解 PnP，
   接受/拒绝门保护）
+- **6d-iter-align-ext 结案（13/13 全正）**：全量 14968 帧 MEAN ADD
+  69.74→78.07（+8.34）；增益 +1.55（lamp）~+18.57（cat）；迭代轮数
+  2 轮为甜点（3 轮仅 5cm5° +3.33）；组合效应=iter_align 单独 +1.67 vs
+  级联 +16.67（120 帧 duck）——**级联 champion 入论文主表**
 - 候选池系列结案：6d-weak-objects 全解码收益不泛化；6d-prescreen2 判负
+- 代码修复：缓存重定向续跑缺陷（`_load_cache_records`，tests/test_cache_resume.py 5 条）
 
 ## 黑名单（已证伪/已定型，禁止回退重跑）
 

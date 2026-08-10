@@ -106,3 +106,38 @@ ia2→ia3 增益递减（5cm5° +3.33），2 轮为性价比甜点。
 - [ ] `docs/LEDGER.md` 已新增或更新一行
 - [ ] 结果文件路径写清楚
 - [ ] `python3 scripts/analysis/check_state.py` 通过
+
+---
+
+## 全 13 物体全量 champion 升级评估（08-10 收尾）
+
+配置：`dense80_depthc_ia.yaml`（iter_align 2 轮 + 级联）全量 14968 帧，
+matches 复用既有提取（matches13_30k / matches13_orig / matches13_dc2），
+深色物体（cam/driller）用 `dense80_w1_ia.yaml`（白背景 bank）。
+结果：`outputs/exp_full_ia/results/*.json`（13 个），基线对比 `outputs/exp_full/results/*.json`。
+
+| 物体 | 粗位姿 | 级联 | Δ | 物体 | 粗位姿 | 级联 | Δ |
+|---|---:|---:|---:|---|---:|---:|---:|
+| ape | 42.49 | 56.91 | +14.42 | holepuncher | 44.50 | 46.21 | +1.71 |
+| benchvise | 79.65 | 84.00 | +4.35 | iron | 87.59 | 95.13 | +7.54 |
+| cam | 63.68 | 75.99 | +12.31 | lamp | 91.83 | 93.38 | +1.55 |
+| can | 92.58 | 96.82 | +4.24 | phone | 61.49 | 71.42 | +9.92 |
+| cat | 51.30 | 69.87 | +18.57 | | | | |
+| driller | 90.57 | 97.06 | +6.49 | | | | |
+| duck | 32.27 | 46.05 | +13.78 | | | | |
+| eggbox | 95.63 | 98.40 | +2.78 | | | | |
+| glue | 75.52 | 86.51 | +10.99 | | | | |
+
+**MEAN（14968 帧按帧加权）**：粗位姿 69.74 → 级联 **78.07**（+8.34）；
+Proj 83.77→87.17、5cm5° 68.69→81.31。13/13 全部正向（+1.55~+18.57，
+物体均值 +8.36）。增益排序与 §4.1 残差分析一致：cat/ape/duck/cam 等
+深残差物体增益最大，eggbox/lamp 等已近饱和物体增益小。
+
+## Decision（ext 收尾）
+
+- 结论：`done`（**champion 升级通过：13/13 全正，MEAN +8.34**）
+- 事故记录：lamp/phone 首轮进程被误 kill 后重启发现缓存重定向续跑缺陷
+  （`phone.jsonl` meta 不匹配 → 重定向文件内容不加载 → 重复处理全部帧），
+  已修复（`_load_cache_records` + tests/test_cache_resume.py 5 条回归），
+  结果不受影响（内存聚合按帧去重）
+- 四件套同步：QUEUE/STATE/LEDGER 同 commit 更新

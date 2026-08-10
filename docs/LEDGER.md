@@ -17,6 +17,7 @@
 | 8 | 深色白背景（定型）| done | driller 95.0 | **背景色按物体亮度选** |
 | 9 | **dc2 + guided_refine** | **champion** | **69.36%** | 弱物体普涨（holepuncher +7.5）|
 | 10 | 回退保护 + 全量评估 | done | **69.74%**（全量 14968 帧）| 子集 71.55 全量衰减 -1.8；can 92.58/lamp 91.83 追近 GSPose 单项；refiner 净负贡献坐实 → 排队 6d-refiner-v2 |
+| 11 | **iter_align 级联（6d-iter-align-ext）** | **champion** | **78.07%**（全量 14968 帧）| **13/13 全正**（+1.55~+18.57，加权 +8.34）；级联组合效应（iter_align 单独 +1.67 vs 级联 +16.67）；eggbox 98.40/driller 97.06 超 95% |
 
 ## 配置 × 结果对照
 
@@ -32,12 +33,13 @@
 | dense80_depthc_sam.yaml | dead | SAM ViT-H 对照判负（duck +0.83 ADD / -3.33 Proj；掩码 IoU 0.914 vs 0.910 几乎相同）|
 | dense80_depthc_mast3r.yaml | done | 全解码对照：**收益不泛化**——duck +6.67（新口径 37.5 vs 30.83），ape/cat/holepuncher 平/负；候选池非一般性瓶颈 |
 | dense80_depthc_p2.yaml | done | 两阶段预筛（top_k_prescreen: 60）判负：duck 34.17 只兑现一半收益；代码保留作消融档 |
-| dense80_depthc_ia.yaml | **champion-candidate** | 迭代渲染对齐（iter_align_iters: 2）：**duck 47.50（+16.67）/ ape 59.17（+11.67）**；位姿优化章核心机制；全 13 物体评估中 |
-| dense80_w1_ia.yaml | running | 深色物体（白背景 bank）的 iter_align 档（base: dense80_w1 + iter_align_iters: 2）；cam/driller 全量 ia 评估用 |
-| dense80_depthc_ia1.yaml | done | 消融 1 轮：duck 待续跑 |
+| dense80_depthc_ia.yaml | **champion** | 迭代渲染对齐（iter_align_iters: 2）：**全 13 物体全量 MEAN 69.74→78.07（+8.34，14968 帧）**；13/13 全正（+1.55~+18.57）；位姿优化章核心机制 + 论文主表级联行 |
+| dense80_w1_ia.yaml | done | 深色物体（白背景 bank）的 iter_align 档（base: dense80_w1 + iter_align_iters: 2）；cam 75.99（+12.31）/ driller 97.06（+6.49）|
+| dense80_depthc_ia1.yaml | done | 消融 1 轮：duck 46.67/84.17/56.67（+15.84，接近 2 轮）|
 | dense80_depthc_ia3.yaml | done | 消融 3 轮：duck 47.50/82.50/65.83（2 轮后增益递减）|
 | dense80_depthc_ia_norefine.yaml | done | 消融 refiner 关：duck 32.50——**iter_align 单独仅 +1.67，增益=级联组合效应** |
 | rng-fix（代码）| done | 每帧确定性 rng 种子（_frame_rng，frame_id 派生）：全空/半满 cache 逐帧一致（duck 30.83/81.67/40.83）；历史子集数字作废 |
+| cache-redirect-resume（代码）| done | 缓存重定向后重启不加载重定向文件内容 → 已缓存帧全部重跑（lamp/phone 全量 ia 事故，重复处理 320-474 帧）；抽 `_load_cache_records` 修复 + 5 条回归测试（tests/test_cache_resume.py）|
 | dense80_depthc_mh.yaml / dense80_tzsearch.yaml / dense80_batch16.yaml / dense80_depth03_w1.yaml | archived | 过程变体 |
 | legacy_mypose.yaml | archived | 旧管线复刻对照（README §8 口径警告）|
 | experiments/dense80_gtmask.yaml | current | GT 掩码检索上界分析 |

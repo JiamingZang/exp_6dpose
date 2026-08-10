@@ -16,22 +16,26 @@
 > 与 [`docs/RESEARCH_LOG.md`](docs/RESEARCH_LOG.md)（研究时间线），
 > 会话原始日志（脱敏）见 `docs/session/`。
 
-## 方法管线（论文 2.6.4 算法 1）
+## 方法管线（论文 2.6.4 算法 1 + 第四章优化级联）
 
-**离线（每物体一次）**：CAD 点云采样（主）/ VGGT 前馈重建（补充，2.2）
-→ 物理尺度对齐 `s = f_query / f_ref`（2.2.3）
-→ 3DGS 训练（gsplat，7000 迭代，`L = 0.8·L1 + 0.2·(1-SSIM)`，自适应密度控制，2.3.1）
-→ 模板渲染：**8 立方体顶点视角 × 5 平面内旋转（72°间隔）= 40 模板**，256×256，
-每模板记录位姿 `P_m` 与 3D 坐标图 `C_m`（alpha 混合渲染物体坐标，2.3.2/2.3.3）
+**离线（每物体一次）**：CAD 点云采样 → 3DGS 训练（gsplat，7000 迭代，
+`L = 0.8·L1 + 0.2·(1-SSIM)` + CAD 深度图监督，自适应密度控制，2.3/3.3.1）
+→ 模板渲染：**fibonacci 球面 16 视角 × 5 平面内旋转（72°间隔）= 80 模板**，512×512，
+每模板记录位姿 `P_m` 与 3D 坐标图 `C_m`（**逆深度混合**渲染高斯锚点，3.3.3）
 → DINOv2 模板 CLS 特征缓存。
 
-**在线（每帧）**：FastSAM 自动掩码（主实验；SAM ViT-H 为消融对照）+ DINOv2 ViT-L/14 CLS 余弦相似度定位
-（模板 max 聚合，argmax 选掩码，bbox 扩 20% 裁剪，2.4）
+**在线（每帧，粗位姿，第三/五章）**：FastSAM 自动掩码（主实验；SAM ViT-H 为消融对照）
++ DINOv2 ViT-L/14 CLS 余弦相似度定位（模板 max 聚合，argmax 选掩码，bbox 扩 20% 裁剪，2.4）
 → MASt3R（`MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric`）局部特征点积相似度，
-模板级分数 `sim(m) = 查询前景像素对模板最大相似度均值`，Top-K 选择
-（默认 K=40=全部模板，即不做候选裁剪；`template_ranking=dinov2` 复用定位相似度预筛，K<40 时只解码 K 个模板，2.5/3.4.3）
+模板级分数 `sim(m) = 查询前景像素对模板最大相似度均值`，Top-K 预筛
+（默认 K=40 从 80 模板中预筛；`template_ranking=dinov2` 复用定位相似度，K<40 时只解码 K 个模板，2.5/3.4.3）
 → 每模板：互最近邻 + cycle consistency（τ=5px）、相似度阈值 0.3、采样 N_s=4096（2.5.2/2.5.3）
-→ RANSAC-EPnP（重投影阈值 5px，置信度 0.999，迭代 1000），内点数择优输出（2.6）。
+→ 逐模板 RANSAC-EPnP（重投影阈值 5px，置信度 0.999，迭代 1000）→ Top-3 联合 PnP 精化
+→ 渲染验证消歧 → 引导式对应精化（12px 窗口，2 轮，3.6）→ 3DGS 可微抛光（回退保护）。
+
+**位姿优化（第四章）**：iter_align 迭代渲染对齐（当前位姿重渲染 3DGS "活模板" →
+MASt3R 再匹配 → 重解 PnP，接受/拒绝门，2 轮）+ 3DGS 可微渲染抛光（400 迭代）。
+两者级联的组合效应是论文核心机制（§4.4：iter_align 单独 +1.67，级联 +16.67）。
 
 ## 目录
 
@@ -44,7 +48,7 @@ exp_6dpose/
 │   ├── experiments/           # 一次性实验配置归档（topk/背景/gtmask 变体）
 │   └── *.yaml                 # 不保留根目录兼容入口；新实验必须显式选择 current/archive
 ├── src/
-│   ├── geometry/              # 视角采样(2.3.2)、尺度对齐(2.2.3)、位姿/投影工具
+│   ├── geometry/              # 视角采样(2.3.2)、尺度对齐（遗留，VGGT 对齐用）、位姿/投影工具
 │   ├── gaussian/              # 3DGS 训练(2.3.1)、模板+3D坐标图/深度图渲染(2.3.3) [GPU]
 │   ├── detection/             # SAM+DINOv2 零样本定位(2.4)、YOLO+旧式裁剪(§8)  [GPU]
 │   ├── matching/              # MASt3R 封装(2.5)、对应过滤、深度反投影提升(§8)
@@ -63,7 +67,7 @@ exp_6dpose/
 ├── setup_gpu.sh               # GPU 机器一键部署（依赖+MASt3R克隆+权重下载）
 ├── requirements.txt           # GPU 完整依赖
 ├── requirements-local.txt     # 本地 CPU 测试依赖
-└── tests/                     # 157 个 pytest 单测，本地（macOS，无CUDA）全绿
+└── tests/                     # 201 个 pytest 单测（197 过 + 4 GPU 跳过），本地（macOS，无CUDA）全绿
 ```
 
 新实验优先写 `configs/current/...` 与 `scripts/<类别>/...`；历史实验日志可能保留旧路径；实际运行以本节和 AGENTS.md 的分类路径为准。
@@ -129,18 +133,18 @@ python scripts/eval/run_linemod.py --objects ape --max-frames 50
 
 | 阶段 | 时长 | 峰值显存 |
 |---|---|---|
-| onboard 单物体（3DGS 7000 迭代 + 40 模板 + DINOv2 特征） | ~5 min | ~6GB |
-| 在线单帧（SAM ViT-H + DINOv2 + MASt3R 40对 + Top-5 PnP） | ~0.6–1.2 s | ~12GB |
-| 13 物体主表 | 3–5 h | ~12GB |
-| 8 组消融全量 | 1–2 天 | 同上 |
+| onboard 单物体（3DGS 7000 迭代 + 80 模板 + DINOv2 特征） | ~5-8 min | ~6GB |
+| 在线单帧（FastSAM + DINOv2 + MASt3R 40 对解码 + 联合 PnP + 抛光 + iter_align） | ~0.6–1.2 s（粗位姿）| ~12GB |
+| 位姿优化级联（iter_align 2 轮 + 可微抛光） | 单帧追加 ~6-7 s | ~12GB |
+| 13 物体主表 | 3–5 h（粗位姿）| ~12GB |
 
 ### 常用开关（configs/current/default.yaml）
 
 - `detection.segmenter` —— `fastsam`（主实验，需 `pip install ultralytics`）| `sam`（ViT-H 消融）| `gt_mask`（分割上界）| `gt_bbox`（定位上界）。未知值直接 raise，不静默回退
-- `matching.top_k` —— Top-K 候选模板数（默认 40=全部模板，即不裁候选；该项只决定候选数，与旧代码的 oracle 数字无关）
+- `matching.top_k` —— Top-K 候选模板数（默认 40，从 80 模板库中预筛；该项只决定候选数，与旧代码的 oracle 数字无关）
 - `matching.template_ranking` —— `dinov2`（默认，复用定位相似度预筛，K<40 时只解码 K 个模板真省算）| `mast3r`（全解码后按 sim(m) 选 Top-K）
-- `templates.n_viewpoints / n_inplane` —— 模板数（默认 8×5=40）
-- `geometry.source: vggt` —— 切 VGGT 前馈重建路线（需 `pip install vggt`）；评测经 Umeyama+ICP 对齐回 CAD 系（见下）
+- `templates.n_viewpoints / n_inplane` —— 模板数（当前主线 dense80 为 16×5=80）
+- `geometry.source: vggt` —— 切 VGGT 前馈重建路线（遗留实验能力，论文不含；需 `pip install vggt`）；评测经 Umeyama+ICP 对齐回 CAD 系（见下）
 - `renderer.backend: pyrender_cad` —— 直接光栅化 CAD 的模板库（消融 3.3.8）
 
 §8 旧代码（MyPose）能力开关，默认值均等于新库原行为：
@@ -204,7 +208,7 @@ python scripts/experiments/import_prior_metrics.py
 默认 `exclude_refs=True` 显式排除这些采样参考帧（`src/datasets/linemod.py`
 的 `reference_frame_ids` / `eval_frames`）。
 
-### VGGT 路线坐标系对齐（论文 3.2.2）
+### VGGT 路线坐标系对齐（遗留实验能力，论文已删此路线）
 
 VGGT 重建点云在第一帧相机系、尺度相对，与 CAD 物体系差一个未知相似变换。
 onboard 时：传入前景掩码只重建物体点 → 点云重心平移到原点 → 用 FPS 采样点做
@@ -236,6 +240,8 @@ Python 3.9，torch CPU 版）：
 157 passed in 1.88s
 ```
 
+Linux GPU 机实测：`192 passed, 4 skipped in 3.96s`（4 个 skip 为 GPU-only 项）。
+
 覆盖：视角采样几何（正交性/球面半径/光轴指向/8 卦限覆盖/72° 平面内旋转）、
 模板内参的整数像素索引约定与渲染器像素中心约定互换（半像素约定，见 VERIFICATION §8.8）、
 尺度对齐（含投影缩放不变性）、互最近邻 + cycle consistency + 阈值 + 采样、
@@ -256,30 +262,32 @@ GPU-only 组件的 ImportError 提示；
 旧 aggregated JSON 口径回归（用真实旧结果文件重算 overall 一致 + 全精度再平均）、
 真实结果导入转换与 oracle 标注字段、legacy_mypose.yaml 逐项对应与默认值不变性。
 
-## 当前结果（2026-08-02，13 物体 × 120 帧均匀采样，含 refine）
+## 当前结果（2026-08-10，LineMod 13 物体全量 14968 帧端到端）
 
-配置：黑背景 + CAD 深度监督训练（depth 0.6）+ 固定视图 + 逆深度锚点。
-完整表格与逐版本对比见 `docs/RESEARCH_LOG.md` §5/§8。
+配置：黑/白背景按物体亮度 + CAD 深度监督训练（depth 0.6）+ 固定视图 + 逆深度锚点
++ 可微抛光（回退保护）。完整表格与逐版本对比见 `docs/RESEARCH_LOG.md` §5/§8。
 
-| 物体 | ADD | Proj | 5cm5° | 训练背景 |
+| 物体 | 粗位姿 ADD | 级联 ADD（iter_align 2 轮） | Δ | 训练背景 |
 |---|---|---|---|---|
-| ape | 50.00 | 86.67 | 64.17 | 黑 |
-| benchvise | 88.33 | 85.83 | 77.50 | 黑 |
-| cam | 55.83 | 65.00 | 55.83 | 白 |
-| can | 84.17 | 84.17 | 85.00 | 黑 |
-| cat | 42.50 | 81.67 | 58.33 | 黑 |
-| driller | 95.00 | 91.67 | 85.00 | 白 |
-| duck | 28.33 | 80.83 | 42.50 | 黑 |
-| eggbox | 98.33 | 94.17 | 80.00 | 黑 |
-| glue | 71.67 | 74.17 | 55.00 | 黑 |
-| holepuncher | 30.00 | 64.17 | 38.33 | 黑 |
-| iron | 90.83 | 90.00 | 72.50 | 黑 |
-| lamp | 89.17 | 80.83 | 80.00 | 黑 |
-| phone | 55.00 | 61.67 | 52.50 | 黑 |
-| **MEAN** | **67.63** | **80.06** | **65.13** | |
+| ape | 42.49 | 56.91 | +14.42 | 黑 |
+| benchvise | 79.65 | 84.00 | +4.35 | 黑 |
+| cam | 63.68 | 75.99 | +12.31 | 白 |
+| can | 92.58 | 96.82 | +4.24 | 黑 |
+| cat | 51.30 | 69.87 | +18.57 | 黑 |
+| driller | 90.57 | 97.06 | +6.49 | 白 |
+| duck | 32.27 | 46.05 | +13.78 | 黑 |
+| eggbox | 95.63 | 98.40 | +2.78 | 黑 |
+| glue | 75.52 | 86.51 | +10.99 | 黑 |
+| holepuncher | 44.50 | 46.21 | +1.71 | 黑 |
+| iron | 87.59 | 95.13 | +7.54 | 黑 |
+| lamp | 91.83 | 93.38 | +1.55 | 黑 |
+| phone | 61.49 | 71.42 | +9.92 | 黑 |
+| **MEAN** | **69.74**（全量加权）| **78.07** | **+8.34** | |
 
 背景选择规则：浅色/无纹理物体（eggbox/lamp/can/glue 等）用黑背景（对比度强），
 深色物体（driller/cam）用白背景；白背景 + 深色物体与黑背景 + 浅色物体等价，
-深度监督（depth 0.6）兜底几何。
+深度监督（depth 0.6）兜底几何。粗位姿 MEAN 为 14968 帧按帧数加权口径；
+级联数字为 iter_align（2 轮）+ 可微抛光级联（§4.4 组合效应），13/13 全正
+（+1.55~+18.57，物体均值 +8.36）。
 
 旧代码 MyPose 端到端 top1 参照：ADD 49.49% / Proj 59.22%（13407 帧全量）。
