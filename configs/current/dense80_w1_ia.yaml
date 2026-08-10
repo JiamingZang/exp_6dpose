@@ -1,0 +1,7 @@
+# 迭代渲染对齐（6d-iter-align）：深色物体（白背景 bank）版本
+# 与 dense80_depthc_ia.yaml 同机制，仅 base 换成 w1（cam/driller 白背景）
+# 用途：全量 champion 升级评估中 cam/driller 的 iter_align 档
+base: dense80_w1.yaml
+
+solver:
+  iter_align_iters: 2
