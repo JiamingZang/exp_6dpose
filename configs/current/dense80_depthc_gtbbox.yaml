@@ -1,0 +1,9 @@
+# 检测框口径（6d-det-align）：GT bbox 定位上界
+# 与级联主链唯一差异 = 定位侧改用 GT bbox（无 DINOv2 检索 → MASt3R 全解码排序，
+# 无 GT 掩码 → 框内全 1 前景）。量化"无检测器零样本定位"相对"完美检测框"的代价。
+base: dense80_depthc_ia.yaml
+
+detection:
+  segmenter: gt_bbox
+  # True = 前景取 GT coseg mask（历史 yolo 模式语义）；False = 框内全 1（严格检测框口径）
+  gt_bbox_use_mask: false

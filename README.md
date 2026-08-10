@@ -1,17 +1,17 @@
-# exp_6dpose —— 基于3DGS模板匹配与几何后验证的未知物体6D位姿估计（实验代码）
+# exp_6dpose —— 基于3DGS模板匹配与迭代渲染对齐的未知物体6D位姿估计（实验代码）
 
-硕士论文《基于3DGS模板匹配与几何后验证的未知物体6D位姿估计》的完整实验代码库。
+硕士论文《基于3DGS模板匹配与迭代渲染对齐的未知物体6D位姿估计》的完整实验代码库。
 论文正文见 `../thesis1_6d_pose.md`；各模块 docstring 均标注了对应的论文章节与公式。
 
-> **当前运行配置（2026-08-02 起）**：与下文论文原描述的差异集中在
-> （1）3DGS 训练增加 **CAD 深度图监督**（`gaussian.depth_l1_weight`，
-> 参考帧 GT 位姿渲染的逆深度图）；（2）训练/渲染背景改**黑色**
-> （`onboard.bg_color: 0`，浅色物体在白背景上边界高斯糊导致锚点系统性错，
-> 见 `docs/RESEARCH_LOG.md` §6）；（3）模板库 80 模板
-> （fibonacci 16×5 视角，非 40 模板 cube8×5）；（4）模板 3D 锚点用
-> **逆深度混合反投影**（与训练监督同一渲染，非 μ 位置混合，§3-4）；
-> （5）重训后**固定模板视图**（复用旧 poses，防止与阶段 2 像素对应错位，§4）；
-> （6）对称物体 PnP 支持 **BOP 离散对称展开**（`ransac_pnp(..., sym_transforms)`，§7）。
+> **最终运行配置（2026-08-10 定型，全部 LineMod 13 物体全量 14968 帧验证）**：
+> （1）3DGS 训练含 **CAD 深度图监督**（`gaussian.depth_l1_weight`，参考帧 GT
+> 位姿渲染的逆深度图）；（2）训练/渲染背景**按物体亮度选择**（浅色物体黑背景
+> `bg_color: 0`、深色物体白背景，统一背景色必崩一边，见 `docs/RESEARCH_LOG.md` §6-8）；
+> （3）模板库 **80 模板**（fibonacci 16×5 视角，512×512）；（4）模板 3D 锚点用
+> **逆深度混合反投影**（与训练监督同一渲染，非 μ 位置混合）；（5）重训后
+> **固定模板视图**（复用旧 poses，防止与阶段 2 像素对应错位）；（6）对称物体
+> PnP 支持 **BOP 离散对称展开**（`ransac_pnp(..., sym_transforms)`）；
+> （7）位姿优化级联：**iter_align（2 轮）+ 3DGS 可微抛光**（§4.4 组合效应）。
 > 完整实验过程与数据见 [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md)（实验报告）
 > 与 [`docs/RESEARCH_LOG.md`](docs/RESEARCH_LOG.md)（研究时间线），
 > 会话原始日志（脱敏）见 `docs/session/`。
@@ -42,9 +42,9 @@ MASt3R 再匹配 → 重解 PnP，接受/拒绝门，2 轮）+ 3DGS 可微渲染
 ```
 exp_6dpose/
 ├── configs/
-│   ├── current/               # 当前主线/复现入口：default、dense80_depthc_guided、legacy_mypose 等
+│   ├── current/               # 当前主线/复现入口：dense80_depthc_guided（粗位姿）、dense80_depthc_ia（级联 champion）、legacy_mypose 等
 │   ├── archive/               # 历史验证/失败路线/只为追溯保留的 dense80_* 配置
-│   ├── ablations/             # 10 组消融（论文 4.3.1–4.3.9），每组一个 yaml
+│   ├── ablations/             # 10 组消融设计（论文 §5.3，未全量开展），每组一个 yaml
 │   ├── experiments/           # 一次性实验配置归档（topk/背景/gtmask 变体）
 │   └── *.yaml                 # 不保留根目录兼容入口；新实验必须显式选择 current/archive
 ├── src/
@@ -107,18 +107,25 @@ bash scripts/data/download_data.sh data
 
 # 2. 离线 onboard：13 物体（每物体 3DGS 7000 迭代约 4-6 分钟，共约 1-1.5 小时）
 python scripts/data/onboard_object.py
+#    背景色按物体亮度：浅色物体黑背景（dense80_depth_bg0）、深色物体白背景
+#    （dense80_depth_w1，driller/cam）；重训后必须固定模板视图
+#    （scripts/data/rebuild_bank_fixed_views.py）
 
-# 3. 主实验：LineMod 13 物体全量评测（论文 3.2 表 1）
-#    每帧约 0.6-1.2s（SAM 自动掩码为主要开销），13 物体 ×~1000 帧 ≈ 3-5 小时
-python scripts/eval/run_linemod.py
+# 3. 主实验一：粗位姿全量评测（论文 5.2，dense80_depthc_guided）
+#    每帧约 0.6-1.2s，13 物体 ×~1000 帧 ≈ 3-5 小时
+python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_guided.yaml
 #    → outputs/linemod_main.json：每物体与均值的 ADD(S)@0.1d / Proj@5pix / 5cm5°
 
-# 4. 速度表（论文 3.4）
+# 4. 主实验二：位姿优化级联（论文 5.2/第四章，champion，iter_align 2 轮）
+python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia.yaml
+#    → MEAN ADD 69.74 → 78.07（13/13 全正）；深色物体用 dense80_w1_ia.yaml
+
+# 5. 速度表（论文 5.4）
 python scripts/eval/run_speed.py --object ape --n-frames 100
 
-# 5. 消融（论文 3.3，8 组）。注意 02/05/06/08 需重建模板库（脚本自动 onboard）
+# 6. 消融（论文 5.3，10 组配置就绪；02/05/06/08 需重建模板库，脚本自动 onboard）
 python scripts/eval/run_ablation.py --ablation configs/ablations/01_topk.yaml
-python scripts/eval/run_ablation.py --all          # 全部 8 组（约 1-2 天，可拆分并行）
+python scripts/eval/run_ablation.py --all          # 全部 10 组（约 1-2 天，可拆分并行）
 #    → outputs/ablation_<name>.json
 ```
 
@@ -140,12 +147,15 @@ python scripts/eval/run_linemod.py --objects ape --max-frames 50
 
 ### 常用开关（configs/current/default.yaml）
 
-- `detection.segmenter` —— `fastsam`（主实验，需 `pip install ultralytics`）| `sam`（ViT-H 消融）| `gt_mask`（分割上界）| `gt_bbox`（定位上界）。未知值直接 raise，不静默回退
+- `detection.segmenter` —— `fastsam`（主实验，需 `pip install ultralytics`）| `sam`（ViT-H 消融）| `gt_mask`（分割上界）| `gt_bbox`（定位/检测框上界，无 DINOv2 检索 → MASt3R 全解码排序）。未知值直接 raise，不静默回退
+- `detection.gt_bbox_use_mask` —— gt_bbox 模式下前景来源：`true`（默认，GT coseg mask）| `false`（框内全 1，严格检测框口径，6d-det-align）
 - `matching.top_k` —— Top-K 候选模板数（默认 40，从 80 模板库中预筛；该项只决定候选数，与旧代码的 oracle 数字无关）
 - `matching.template_ranking` —— `dinov2`（默认，复用定位相似度预筛，K<40 时只解码 K 个模板真省算）| `mast3r`（全解码后按 sim(m) 选 Top-K）
+- `solver.iter_align_iters` —— 迭代渲染对齐轮数（默认 0 关；champion 档 `dense80_depthc_ia.yaml` 为 2）
+- `solver.guided_iters / guided_radius` —— 引导式对应精化（默认 2 轮 / 12px 窗口）
 - `templates.n_viewpoints / n_inplane` —— 模板数（当前主线 dense80 为 16×5=80）
 - `geometry.source: vggt` —— 切 VGGT 前馈重建路线（遗留实验能力，论文不含；需 `pip install vggt`）；评测经 Umeyama+ICP 对齐回 CAD 系（见下）
-- `renderer.backend: pyrender_cad` —— 直接光栅化 CAD 的模板库（消融 3.3.8）
+- `renderer.backend: pyrender_cad` —— 直接光栅化 CAD 的模板库（消融 5.3.3）
 
 §8 旧代码（MyPose）能力开关，默认值均等于新库原行为：
 
@@ -199,7 +209,7 @@ python scripts/experiments/import_prior_metrics.py
 逐项移植清单、旧代码 file:line 出处、对应测试名见
 [`VERIFICATION.md`](VERIFICATION.md) §8。
 
-### 数据划分协议（论文 4.1.1，防参考帧泄漏）
+### 数据划分协议（论文 5.1.1，防参考帧泄漏）
 
 3DGS 参考视图与评测集必须零重叠。loader 支持可选的 PVNet 式官方划分：
 放置 `data/splits/lm/<obj>_train.txt`（一行一个帧号，从 PVNet 仓库
@@ -218,14 +228,18 @@ Umeyama 闭式相似变换（可选 ICP 精化）求"重建系→CAD 系"变换�
 
 ### 与论文的已知实现取舍
 
-- 模板 3D 坐标图用 **alpha 混合渲染高斯中心 μ**（除以 alpha 归一），是论文
-  2.3.3 argmax 主贡献高斯定义的光顺化实现，无需修改 gsplat 光栅器；
+- 模板 3D 坐标图用 **逆深度混合**渲染高斯锚点（`render_invdepth` 统一训练监督、
+  深度图与坐标图提升三处数学，`src/gaussian/gs_trainer.py` / `template_renderer.py`）；
 - 互最近邻 + cycle consistency（τ=5px）合并实现：严格互最近邻是 τ=0 特例，
   往返偏差 ≤ τ 的过滤天然包含互匹配对（`src/matching/correspondence.py`）；
+- 对应采样用**相似度加权随机**（非降序截断），高置信匹配更高概率保留且维持
+  空间多样性（`correspondence.py` 的 `n_sample=4096`）；
 - MASt3R 解码器是成对交叉注意力，跨帧可复用的只有 ViT 编码器 token——
-  `Mast3rMatcher.prepare_templates` 预提取并缓存 40 个模板的编码器特征，
-  在线每帧只编码查询一次 + 40 次解码（论文 2.6.4 复杂度分析中的主要瓶颈）；
-- LoFTR 匹配器为 TODO 接口（消融 3.3.3 预留），调用时显式
+  `Mast3rMatcher.prepare_templates` 预提取并缓存 80 个模板的编码器特征，
+  在线每帧只编码查询一次 + K 次解码（论文 2.6.4 复杂度分析中的主要瓶颈）；
+- iter_align 接受/拒绝门为**迭代后单次门控**（最终位姿 vs 粗位姿，变差整体
+  回退），非每轮门控（`pipeline.py::_iter_align`）；
+- LoFTR 匹配器为 TODO 接口（消融 5.3.3 预留），调用时显式
   `NotImplementedError` 并附接入说明（`src/matching/alt_matchers.py`）。
 
 ## 本地测试结果
@@ -240,12 +254,13 @@ Python 3.9，torch CPU 版）：
 157 passed in 1.88s
 ```
 
-Linux GPU 机实测：`192 passed, 4 skipped in 3.96s`（4 个 skip 为 GPU-only 项）。
+Linux GPU 机实测：`197 passed, 4 skipped in 3.65s`（4 个 skip 为 GPU-only 项）。
 
 覆盖：视角采样几何（正交性/球面半径/光轴指向/8 卦限覆盖/72° 平面内旋转）、
 模板内参的整数像素索引约定与渲染器像素中心约定互换（半像素约定，见 VERIFICATION §8.8）、
 尺度对齐（含投影缩放不变性）、互最近邻 + cycle consistency + 阈值 + 采样、
 Top-K DINOv2 预筛（相似度降序传递 + 只解码 K 个模板 + 无效组合显式 raise）、
+缓存续跑（meta 指纹隔离 + 重定向目标加载，`tests/test_cache_resume.py`）、
 参考/评测数据划分（PVNet split 生效 + 无 split 时排除采样参考帧，防泄漏）、
 VGGT→CAD 相似变换（Umeyama 恢复精度 / FPS / ICP 精化 / 位姿变换相机点一致性）、
 分割器未知值显式 raise（禁止静默回退）、

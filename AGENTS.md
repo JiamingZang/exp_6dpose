@@ -6,7 +6,7 @@
 2. **读账本**：`docs/LEDGER.md`（轮次状态 + 配置归属）；细节在
    `docs/EXPERIMENTS.md`（全部中间数字）与 `docs/RESEARCH_LOG.md`（时间线）
 3. **读实验队列**：`experiments/QUEUE.md`；没有把任务状态改成 `running` 前，禁止开跑
-4. **动手前冒烟**：`python -m pytest -q`（14 个测试，CPU 可跑；GPU 项自动跳）
+4. **动手前冒烟**：`python -m pytest -q`（197 过 + 4 GPU 跳过，CPU 可跑；GPU 项自动跳）
 5. **流程自检**：`python3 scripts/analysis/check_state.py`；失败先修流程，不要继续实验
 
 ## 主链命令（顺序不可换）

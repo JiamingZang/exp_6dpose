@@ -653,6 +653,10 @@ class PoseEstimator:
         if self._loc_mode == "gt_bbox":
             if gt_bbox is None:
                 return None
+            # 严格检测框口径（gt_bbox_use_mask: false）：只给框不给掩码，
+            # 前景=框内全 1；默认沿袭历史行为（GT coseg mask 提供前景）。
+            if not bool(d_cfg.get("gt_bbox_use_mask", True)):
+                gt_mask = None
             loc = self.localizer.localize(img_rgb_u8, gt_bbox, gt_mask)
         elif self._loc_mode == "gt_mask":
             if gt_mask is None:
