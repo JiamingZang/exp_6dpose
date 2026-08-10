@@ -1,0 +1,6 @@
+# 检测框口径 2b（6d-det-align）：GT bbox + GT coseg mask（检测框 + 完美分割上界）
+# 与 2a 唯一差异 = 前景取 GT 掩码（掩码质量变量单独拆出）。
+base: dense80_depthc_gtbbox.yaml
+
+detection:
+  gt_bbox_use_mask: true

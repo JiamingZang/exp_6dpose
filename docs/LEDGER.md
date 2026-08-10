@@ -40,6 +40,7 @@
 | dense80_depthc_ia_norefine.yaml | done | 消融 refiner 关：duck 32.50——**iter_align 单独仅 +1.67，增益=级联组合效应** |
 | rng-fix（代码）| done | 每帧确定性 rng 种子（_frame_rng，frame_id 派生）：全空/半满 cache 逐帧一致（duck 30.83/81.67/40.83）；历史子集数字作废 |
 | cache-redirect-resume（代码）| done | 缓存重定向后重启不加载重定向文件内容 → 已缓存帧全部重跑（lamp/phone 全量 ia 事故，重复处理 320-474 帧）；抽 `_load_cache_records` 修复 + 5 条回归测试（tests/test_cache_resume.py）|
+| dense80_depthc_gtbbox{,_gtmask,_pd}.yaml | done | 6d-det-align 检测框口径拆变量：2a（框+全1+全解码）5 物体均值 -2.84 判负；2c（+DINOv2 预筛）≈基线 → 定位不是瓶颈；2b（GT 掩码）cat/duck +4~6；全解码排序物体异质（duck 受益）|
 | dense80_depthc_mh.yaml / dense80_tzsearch.yaml / dense80_batch16.yaml / dense80_depth03_w1.yaml | archived | 过程变体 |
 | legacy_mypose.yaml | archived | 旧管线复刻对照（README §8 口径警告）|
 | experiments/dense80_gtmask.yaml | current | GT 掩码检索上界分析 |

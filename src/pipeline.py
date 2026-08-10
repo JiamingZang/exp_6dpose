@@ -485,6 +485,13 @@ class PoseEstimator:
         if seg == "gt_bbox":
             from .detection.localize import GtBboxLocalizer
             self.localizer = GtBboxLocalizer(cfg["detection"])
+            if cfg["detection"].get("gt_bbox_prescreen") == "dinov2":
+                # 2c 口径：检测框定位 + DINOv2 模板预筛（模板选择不变）
+                from .detection.localize import Dinov2Embedder
+                self.localizer.set_dino_prescreen(
+                    Dinov2Embedder(cfg["detection"], device=device),
+                    self.bank.dino_feats,
+                    float(cfg["onboard"].get("bg_color", 1.0)))
             self._loc_mode = "gt_bbox"
         elif seg == "gt_mask":
             from .detection.localize import GtMaskLocalizer

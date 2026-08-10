@@ -1,0 +1,8 @@
+# 检测框口径 2c（6d-det-align）：GT bbox 定位 + DINOv2 模板预筛
+# 与 2a（dense80_depthc_gtbbox）唯一差异 = 恢复 DINOv2 模板预筛
+# （拆掉"全解码 vs DINOv2 预筛"变量，只保留"GT 框 vs 零样本定位"变量）。
+# 前景仍为框内全 1（无 GT mask 依赖，严格检测框口径）。
+base: dense80_depthc_gtbbox.yaml
+
+detection:
+  gt_bbox_prescreen: dinov2

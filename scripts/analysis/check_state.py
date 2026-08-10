@@ -52,7 +52,7 @@ def parse_queue(path: Path) -> list[dict[str, str]]:
 def referenced_paths(text: str) -> list[str]:
     found = re.findall(r"`((?:configs|scripts|experiments)/[^`\s]+)`", text)
     found += re.findall(r"\b((?:configs|scripts|experiments)/[^\s)]+)", text)
-    return [p.rstrip(".,;:") for p in found]
+    return [p.rstrip("`.,;:") for p in found]
 
 
 def check_required_files(errors: list[str]) -> None:

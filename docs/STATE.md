@@ -22,7 +22,7 @@
 
 | 项 | 说明 |
 |---|---|
-| 6d-det-align（优先级 1）| GSPose 对齐口径：换 YOLOv5 检测框喂管线 + 核对评测帧集（我们=BOP test 14968 帧）；双口径汇报（检测框口径 vs 无检测器端到端）|
+| 6d-ablation-full（优先级 1，待排期）| 论文 §5.3 十组消融全量（run_ablation.py --all）|
 | 6d-ablation-full（优先级 1）| 论文 §3.3 八组消融全量跑齐（run_ablation.py --all），支撑模板库构建+dc2 方法贡献的消融证据 |
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
@@ -39,6 +39,10 @@
   级联 +16.67（120 帧 duck）——**级联 champion 入论文主表**
 - 候选池系列结案：6d-weak-objects 全解码收益不泛化；6d-prescreen2 判负
 - 代码修复：缓存重定向续跑缺陷（`_load_cache_records`，tests/test_cache_resume.py 5 条）
+- **6d-det-align 结案（检测框口径判负）**：GT bbox 上界不改善结果（2a 均值 -2.84）；
+  零样本定位已近检测框水平（2c ≈ 基线 ±2）；掩码质量是 cat/duck 瓶颈
+  （2b +4~6）、ape 匹配侧例外；全解码排序物体异质（duck 受益）——
+  与 GSPose 92.0 的差距不来自定位，双口径叙事入论文 §5.2.1
 
 ## 黑名单（已证伪/已定型，禁止回退重跑）
 

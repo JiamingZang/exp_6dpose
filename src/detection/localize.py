@@ -415,6 +415,20 @@ class GtBboxLocalizer:
 
     def __init__(self, cfg_det: Dict):
         self.expand = float(cfg_det.get("bbox_expand", 0.2))
+        self.dino_embedder = None
+        self.template_feats = None
+        self.bg = 1.0
+
+    def set_dino_prescreen(self, embedder, template_feats, bg_color: float):
+        """启用 DINOv2 模板预筛（6d-det-align 2c：只换定位、模板选择不变）。
+
+        gt_bbox_prescreen: dinov2 时调用：框内裁剪提 CLS 特征 → 与模板库
+        相似度降序生成 template_order（与 fastsam 分支同一函数），避免
+        "检测框口径"混入"全解码 vs DINOv2 预筛"变量。
+        """
+        self.dino_embedder = embedder
+        self.template_feats = np.asarray(template_feats, dtype=np.float32)
+        self.bg = float(bg_color)
 
     def localize(self, img_rgb_u8: np.ndarray, bbox_xywh,
                  gt_mask: Optional[np.ndarray] = None) -> Localization:
@@ -425,8 +439,19 @@ class GtBboxLocalizer:
             gt_mask = np.zeros((h, w), dtype=bool)
             x, y, bw, bh = [int(v) for v in bbox_xywh]
             gt_mask[y:y + bh, x:x + bw] = True
+        order = None
+        if self.dino_embedder is not None:
+            # 与 fastsam 分支同纪律：掩码外背景填模板同色背景（bg_color）
+            bx, by, bw, bh = [int(v) for v in bbox_xywh]
+            crop = img_rgb_u8[max(0, by):by + bh, max(0, bx):bx + bw]
+            seg_crop = gt_mask[max(0, by):by + bh, max(0, bx):bx + bw]
+            crop = crop.copy()
+            crop[~seg_crop] = int(round(self.bg * 255))
+            feat = self.dino_embedder.cls_features([crop])[0]
+            order, _ = template_similarity_order(feat, self.template_feats)
         return Localization(mask=gt_mask.astype(bool), crop_box=crop_box,
-                            score=1.0, best_template=-1)
+                            score=1.0, best_template=-1,
+                            template_order=order)
 
 
 class GtMaskLocalizer:
