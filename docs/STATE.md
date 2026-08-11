@@ -26,7 +26,7 @@
 | 6d-ablation-full（优先级 1）| 论文 §3.3 八组消融全量跑齐（run_ablation.py --all），支撑模板库构建+dc2 方法贡献的消融证据 |
 | 6d-gap-oracle（已结案 08-11）| 候选池 vs 选择损失：top40 池内 GT 择优 62.0 ≈ 端到端 61.2（+0.8）——**候选池生成是总瓶颈**；分型：duck/cat 池有货选择倒挂、ape/phone 池没货优化净赚 |
 | 6d-mask-geo（已结案 08-11）| 掩码几何平移候选判负（duck FastSAM -3.33 / GT 掩码 -2.50）：机制无效非掩码拖累；失败帧再分解：48.5% 旋转对 t 错（tz 仅 35 帧、xy 错 1556 帧、GT t 替换 100% 恢复）→ 平移病态实为 xy；BOP 深度图可用（从未用于推理）|
-| 6d-tz-depth（在跑，08-11 14:25）| RGB-D 深度平移校正：掩码内深度中值替换 z + 渲染质心对齐 xy（FoundationPose 启发）；tzxy 质心对齐单独 60 帧滚动 ≈ 基线（衰减中）；duck 120 帧验证中 |
+| 6d-tz-depth（在跑，08-11 14:29）| 平移病态两档：深度档（BOP 中值 z，仅消融——新场景 RGB-only 无深度）+ RGB-only 档（refiner 阶段 1 t-only 加强，主线可部署）；tzxy 质心对齐单独 ≈ 基线（衰减中）|
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
 

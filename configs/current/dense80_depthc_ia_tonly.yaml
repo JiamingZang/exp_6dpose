@@ -1,0 +1,14 @@
+# t-only 渲染对齐精化（6d-t-align RGB-only 档）：固定 R 只优化平移
+# 与 champion（dense80_depthc_ia）唯一差异 = refiner 阶段 1 加强：
+# refine_stage1_iters 200（t-only 主导）+ 面积正则（tz 信号）+ 短 6D 收尾
+# 背景（08-11 gap 分解）：失败帧 48.5% 旋转对 t 错（99.1% 粗位姿 R≤10°，
+# xy 错 1556/1592 帧）——旋转无需再搜，只在 t 的小空间渲染对齐。
+# RGB-only（无深度依赖，新物体新场景可部署）；tz_depth 深度档仅作 BOP 消融。
+# refiner 回退保护（align_loss 变差保留粗位姿）照常生效。
+base: dense80_depthc_ia.yaml
+
+solver:
+  refine_stage1_iters: 200
+  refine_area_lambda: 1.0
+  refine_area_gate_dice: 0.3
+  refine_iters: 50
