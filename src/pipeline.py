@@ -1620,6 +1620,14 @@ class PoseEstimator:
                 # 精化变差回退种子位姿，防 refiner 把好种子推坏。
                 seed_rf = int(s_cfg.get(
                     "iter_align_seed_refine_iters", 0) or 0)
+                # 择优门控（08-11 multi-ext 泛化教训）：multi 在池有货
+                # 物体（duck/cat）+8~11，在池没货物体（ape/holepuncher）
+                # -10~-15——align_loss 无条件换种子把 inlier 选出的 best
+                # 也换掉（95/120 帧换种子），弱纹理物体 align_loss 与
+                # ADD 相关性弱，净换坏。gate>0 时只接受比 best 种子
+                # 显著更优（相对改善 ≥ gate）的候选，否则保持 best。
+                gate = float(s_cfg.get("iter_align_multi_gate", 0.0) or 0.0)
+                la_best_seed = None
                 for s in seeds:
                     R_s, t_s = np.asarray(s.R), np.asarray(s.t)
                     R_i, t_i = self._iter_align(chosen_ex, K_query,
@@ -1646,7 +1654,17 @@ class PoseEstimator:
                     la = self._verifier.align_loss(
                         chosen_ex["crop"], chosen_ex["mask_crop"],
                         K_crop, R_i, t_i)
-                    if la < best_la:
+                    if gate > 0:
+                        if s is best:
+                            la_best_seed = la
+                            if la < best_la:
+                                best_la, best_r = la, (R_i, t_i)
+                            continue
+                        if la_best_seed is None:
+                            continue
+                        if la <= la_best_seed * (1.0 - gate):
+                            best_la, best_r = la, (R_i, t_i)
+                    elif la < best_la:
                         best_la, best_r = la, (R_i, t_i)
                 R_c, t_c = best_r
             else:

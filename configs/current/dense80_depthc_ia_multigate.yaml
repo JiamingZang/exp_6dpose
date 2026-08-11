@@ -1,0 +1,15 @@
+# 多初始假设 iter_align + 择优门控（6d-multi-gate）：multi 泛化修复
+# 与 champion 唯一差异 = solver.iter_align_multi_hypo: 5 +
+# solver.iter_align_multi_gate: 0.05
+# 背景（08-11 multi-ext 泛化教训）：multi 在池有货物体（duck +8.33 /
+# cat +10.83）大正，池没货物体（ape -10.00 / holepuncher ~-15）大负——
+# align_loss 无条件换种子把 inlier 选出的 best 也换掉（ape 95/120 帧
+# 换种子），弱纹理物体 align_loss 与 ADD 相关性弱，净换坏。
+# 修复：gate=0.05 时只接受比 best 种子相对改善 ≥5% 的候选，否则保持
+# best 种子结果（等价 ia 单假设）。通用原则：多假设择优必须有拒绝域，
+# 噪声尺度内的损失差不构成替换依据。
+base: dense80_depthc_ia_multi.yaml
+
+solver:
+  iter_align_multi_hypo: 5
+  iter_align_multi_gate: 0.05
