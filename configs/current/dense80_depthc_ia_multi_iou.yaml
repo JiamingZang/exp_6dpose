@@ -1,0 +1,15 @@
+# 多初始假设 iter_align + 几何择优（6d-multi-iou）：gate 档的指标升级
+# 与 champion 唯一差异 = solver.iter_align_multi_hypo: 5 +
+# solver.iter_align_multi_select: iou（+ iter_align_multi_iou_gate: 0.02）
+# 背景（08-12 通用化）：multi-ext 分型实锤——池有货（duck/cat）大正、
+# 池没货（ape/holepuncher/phone）大负；gate（光度门控 0.05）duck 滚动
+# ≈基线——光度 align_loss 做择优/门控基准在弱纹理物体上挡收益（正确
+# 种子 align_loss 优势 <5% 但 ADD 优势大）。通用修复：择优/门控基准
+# 换几何量——渲染掩码 IoU（与 ADD 相关性比光度强，弱纹理鲁棒）：
+# 候选 iou 须 > best 种子 iou + 0.02 才替换（几何拒绝域）。
+base: dense80_depthc_ia_multi.yaml
+
+solver:
+  iter_align_multi_hypo: 5
+  iter_align_multi_select: iou
+  iter_align_multi_iou_gate: 0.02

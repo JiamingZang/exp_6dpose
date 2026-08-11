@@ -1627,6 +1627,15 @@ class PoseEstimator:
                 # ADD 相关性弱，净换坏。gate>0 时只接受比 best 种子
                 # 显著更优（相对改善 ≥ gate）的候选，否则保持 best。
                 gate = float(s_cfg.get("iter_align_multi_gate", 0.0) or 0.0)
+                # 择优指标（08-12 通用化）：align=光度 align_loss（现状）；
+                # iou=渲染掩码 IoU（几何量，与 ADD 相关性更强，弱纹理
+                # 物体鲁棒）。gate duck 46.67≈基线证明光度门控挡收益
+                # （正确种子 align_loss 优势 <5% 但 ADD 优势大），换几何
+                # 门控：候选 iou 须 > best 种子 iou + iou_gate 才替换。
+                sel_iou = (s_cfg.get("iter_align_multi_select", "align")
+                           == "iou")
+                iou_gate = float(s_cfg.get(
+                    "iter_align_multi_iou_gate", 0.02) or 0.02)
                 la_best_seed = None
                 for s in seeds:
                     R_s, t_s = np.asarray(s.R), np.asarray(s.t)
@@ -1651,10 +1660,22 @@ class PoseEstimator:
                                 K_crop, R_r, t_r)
                             if la_post <= la_pre:
                                 R_i, t_i = R_r, t_r
-                    la = self._verifier.align_loss(
-                        chosen_ex["crop"], chosen_ex["mask_crop"],
-                        K_crop, R_i, t_i)
-                    if gate > 0:
+                    if sel_iou:
+                        la = self._verifier.mask_iou(
+                            R_i, t_i, K_crop, chosen_ex["mask_crop"])
+                        if s is best:
+                            la_best_seed = la
+                            if la > best_la:
+                                best_la, best_r = la, (R_i, t_i)
+                            continue
+                        if la_best_seed is None:
+                            continue
+                        if la >= la_best_seed + iou_gate:
+                            best_la, best_r = la, (R_i, t_i)
+                    elif gate > 0:
+                        la = self._verifier.align_loss(
+                            chosen_ex["crop"], chosen_ex["mask_crop"],
+                            K_crop, R_i, t_i)
                         if s is best:
                             la_best_seed = la
                             if la < best_la:
@@ -1664,8 +1685,12 @@ class PoseEstimator:
                             continue
                         if la <= la_best_seed * (1.0 - gate):
                             best_la, best_r = la, (R_i, t_i)
-                    elif la < best_la:
-                        best_la, best_r = la, (R_i, t_i)
+                    else:
+                        la = self._verifier.align_loss(
+                            chosen_ex["crop"], chosen_ex["mask_crop"],
+                            K_crop, R_i, t_i)
+                        if la < best_la:
+                            best_la, best_r = la, (R_i, t_i)
                 R_c, t_c = best_r
             else:
                 R_i, t_i = self._iter_align(chosen_ex, K_query, R_c, t_c)
