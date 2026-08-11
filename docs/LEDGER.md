@@ -46,7 +46,8 @@
 | dense80_depthc_ia_tzdepth.yaml / dense80_depthc_ia_tonly.yaml | done | 6d-tz-depth 平移校正收官：深度档 +4.17（RGB-D 充分条件）；t-only -2.50 / tzxy -1.67（RGB-only 全负）——单目平移病态=信息极限 |
 | dense80_depthc_ia_multi.yaml | done | 6d-ia-multi 多初始假设 iter_align 通过：duck 55.83（+8.33，端到端）；效率 +2%；挑战 3 首正，扩 5 弱物体 |
 | dense80_depthc_ia_multigate.yaml | done | 6d-multi-gate 光度门控判负：duck 滚动 45.45≈基线——拒绝域方向对但指标错（align_loss 与 ADD 相关性弱）；代码保留（gate 档）|
-| dense80_depthc_ia_multi_iou.yaml | running | 6d-multi-iou 几何择优（multi + iter_align_multi_select: iou + iou_gate 0.02）：mask_iou 拒绝域——multi-ext 泛化失败（-4.34 均值）+ gate 判负后的通用化修复 |
+| dense80_depthc_ia_multi_iou.yaml | done | 6d-multi-iou 几何择优判负：5 物体均值 57.00（-4.00 vs ia）——掩码偏差污染 mask_iou，三个没货物体仍负；渲染比较量两候选全负 |
+| dense80_depthc_ia_multi_inl.yaml | running | 6d-multi-inl inlier 几何择优（multi + iter_align_multi_select: inlier + inl_gate 500）：PnP 内点数=ia 选 best 同源指标，择优指标系列收官档 |
 | dense80_depthc_ia_track.yaml | done | 6d-track-seed 帧间跟踪种子：duck 50.83（+3.33 vs 基线）但低于 multi 55.83；代价 +40% 不划算；仅论文视频扩展素材 |
 | dense80_depthc_ia_multirefine.yaml | done | 6d-multi-refine 种子级渲染对比优化判负：duck 49.17（-6.66 vs multi）——refiner 盆底择优失效（ADD -6.66 但 Proj +9.16）；渲染对比优化两轮判负结案 |
 | dense80_depthc_ia_mmr.yaml | done | 6d-prescreen-mmr MMR 预筛多样性判负：duck 46.67（-0.83）——预筛阶段结案 |

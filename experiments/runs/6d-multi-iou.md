@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-multi-iou` |
 | Owner | `qoder` |
-| Status | `running` |
+| Status | `done` |
 | Started | `2026-08-12 01:06` |
-| Finished | — |
+| Finished | `2026-08-12 06:15` |
 | Queue row | `experiments/QUEUE.md::6d-multi-iou` |
 
 ## Question
@@ -63,23 +63,23 @@ done
 | ape | 59.17 | 49.17 | 45.00 | -14.17 | -4.17 |
 | cat | 64.17 | 75.00 | 74.17 | +10.00 | -0.83 |
 | holepuncher | 56.67 | 40.83 | 50.00 | -6.67 | +9.17 |
-| phone | 77.50 | 62.50 | 待 |  |  |
-| 4 物体均值 | 56.88 | 55.21 | 55.42 | -1.46 | +0.21 |
+| phone | 77.50 | 62.50 | 63.33 | -14.17 | +0.83 |
+| 5 物体均值 | 61.00 | 56.67 | 57.00 | **-4.00** | +0.33 |
 
 ## Decision
 
-- 结论：待 phone 出炉（4 物体：iou 修复 multi 的没货灾难（holepuncher
-  +9.17），但 ape 仍 -14.17——FastSAM 掩码偏差在弱纹理物体上污染
-  mask_iou，与 6d-mask-geo 结案呼应）
+- 结论：`drop`（5 物体均值 -4.00 vs ia，未达成功线 61.00）
 - 原因：
-  1. iou 在池有货物体（duck/cat）≈ multi 收益（+5/+10）——几何门控
-     保留了正确替换；
-  2. holepuncher 修复（-15.84 → -6.67）证明几何门控确实挡住乱换；
-  3. ape 异常（-14.17）：54/120 帧替换且大多换坏——ape 掩码 IoU 噪声
-     最大（弱纹理 + FastSAM 掩码偏差），iou 基准在 ape 上不可靠；
-  4. 通用结论：渲染比较量（align_loss/mask_iou）作为择优基准在弱纹理
-     物体上系统性不可靠——唯一未试的是 PnP inlier（纯几何、ia 选 best
-     同源），见 6d-multi-inl。
+  1. iou 修复了 multi 的没货灾难（holepuncher -15.84→-6.67、phone
+     -15.00→-14.17 略修、ape 持平），并保留 duck/cat 有货收益
+     （+5/+10）——几何门控机制有效；
+  2. 但三个没货物体仍全负（ape -14.17 / phone -14.17 / holepuncher
+     -6.67）——FastSAM 掩码偏差在弱纹理物体上污染 mask_iou 基准，
+     与 6d-mask-geo 结案（掩码偏差污染面积比）同根；
+  3. 通用结论：渲染比较量（align_loss / mask_iou）作择优基准在弱纹理
+     物体上系统性不可靠——两个候选指标都判负，唯一未试的是 PnP
+     inlier（纯几何、ia 选 best 同源、不依赖渲染/掩码）→ 6d-multi-inl
+     （06:15 已启动）。
 - 下一步：6d-multi-inl（inlier 几何择优）收官对照
 - 产物：`outputs/exp_multi_iou/results/*.json`
 
