@@ -1,0 +1,9 @@
+# 掩码几何候选 + GT 掩码（6d-mask-geo 判别实验 B）
+# 与 dense80_depthc_ia_geocand 唯一差异 = segmenter: gt_mask
+# 判别：geocand duck -3.33（FastSAM 掩码）是"掩码质量拖累"还是"几何机制
+# 本身无效"？GT 掩码下几何候选 ≥ 基线+3 → 机制有效，瓶颈是掩码；
+# 仍 ≤ 基线 → 机制无效（质心反投影/择优不可分），结案。
+base: dense80_depthc_ia_geocand.yaml
+
+detection:
+  segmenter: gt_mask

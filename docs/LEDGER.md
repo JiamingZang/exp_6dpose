@@ -42,7 +42,7 @@
 | cache-redirect-resume（代码）| done | 缓存重定向后重启不加载重定向文件内容 → 已缓存帧全部重跑（lamp/phone 全量 ia 事故，重复处理 320-474 帧）；抽 `_load_cache_records` 修复 + 5 条回归测试（tests/test_cache_resume.py）|
 | dense80_depthc_gtbbox{,_gtmask,_pd}.yaml | done | 6d-det-align 检测框口径拆变量：2a（框+全1+全解码）5 物体均值 -2.84 判负；2c（+DINOv2 预筛）≈基线 → 定位不是瓶颈；2b（GT 掩码）cat/duck +4~6；全解码排序物体异质（duck 受益）|
 | dense80_depthc_ia_topk.yaml | done | 6d-gap-oracle 候选池 oracle 上界（champion + metrics.topk_best [1,3,5,40]）：top40 池内 GT 择优 62.0 ≈ 端到端 61.2 → 候选池生成是总瓶颈；duck/cat 池有货选择倒挂、ape/phone 优化净赚 |
-| dense80_depthc_ia_geocand.yaml | running | 6d-mask-geo 掩码几何平移候选（champion + solver.mask_geo_candidate: true）：GS-Pose §3.2 面积比 z + 质心 xy 解析平移，与 PnP 结果 align_loss 竞争择优；对症失败帧 48.5% 纯 t 错 |
+| dense80_depthc_ia_geocand{,_gtmask}.yaml | done | 6d-mask-geo 掩码几何平移候选判负：duck FastSAM 44.17（-3.33）/ GT 掩码 45.00（-6.67 vs GT 掩码档 51.67）——机制无效非掩码拖累；代码保留（开关默认关）|
 | dense80_depthc_mh.yaml / dense80_tzsearch.yaml / dense80_batch16.yaml / dense80_depth03_w1.yaml | archived | 过程变体 |
 | legacy_mypose.yaml | archived | 旧管线复刻对照（README §8 口径警告）|
 | experiments/dense80_gtmask.yaml | current | GT 掩码检索上界分析 |
