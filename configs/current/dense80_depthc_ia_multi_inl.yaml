@@ -1,0 +1,16 @@
+# 多初始假设 iter_align + inlier 几何择优（6d-multi-inl）：择优指标系列收官
+# 与 champion 唯一差异 = solver.iter_align_multi_hypo: 5 +
+# solver.iter_align_multi_select: inlier + iter_align_multi_inl_gate: 500
+# 背景（08-12 择优指标系列）：
+#   align（multi 原版）：duck +8.33 / ape -10.00——光度量弱纹理噪声大
+#   gate（align 相对 5%）：duck ≈基线——光度门控挡收益
+#   iou（mask_iou 0.02）：duck +5.00 / ape -14.17——FastSAM 掩码偏差污染
+#   inlier（本档）：PnP 内点数 = ia 基线选 best 的同源指标（纯几何，
+#     不依赖渲染比较/掩码），与 ADD 相关性最直接；候选须比 best 种子
+#     多 inl_gate=500 内点才替换（几何拒绝域）。
+base: dense80_depthc_ia_multi.yaml
+
+solver:
+  iter_align_multi_hypo: 5
+  iter_align_multi_select: inlier
+  iter_align_multi_inl_gate: 500

@@ -1127,11 +1127,15 @@ class PoseEstimator:
         PnP，迭代 iter_align_iters 轮。位姿越准渲染越像真图 → 域差随迭代
         收缩 → 对应质量递增（首轮匹配是在离线模板视角上做的，当前位姿
         渲染视角天然更接近查询视角）。接受/拒绝：渲染对齐损失变差回退。
+
+        Returns:
+            (R, t, n_inliers)：最后成功一轮 PnP 的内点数（multi 择优
+            几何基准用；无 PnP 时 -1）。
         """
         s_cfg = self.cfg["solver"]
         iters = int(s_cfg.get("iter_align_iters", 0) or 0)
         if iters <= 0 or self._refiner is None:
-            return R, t
+            return R, t, -1
         import cv2
         from .matching.mast3r_wrapper import _resize_to_multiple16
         from .matching.correspondence import mutual_nn_matches
@@ -1154,6 +1158,7 @@ class PoseEstimator:
         Rc = np.asarray(R, dtype=np.float64)
         tc = np.asarray(t, dtype=np.float64)
         device = self._refiner.device
+        last_inl = -1
         for _ in range(iters):
             rgb, alpha, depth = self._refiner.render_rgbd(
                 torch.tensor(Rc, dtype=torch.float32, device=device),
@@ -1219,6 +1224,7 @@ class PoseEstimator:
             if res is None or not res.success:
                 break
             Rc, tc = res.R, res.t
+            last_inl = res.n_inliers
         # 接受/拒绝：渲染对齐损失变差回退粗位姿（与 guided_refine 同纪律）
         if self._verifier is not None:
             l_before = self._verifier.align_loss(
@@ -1226,8 +1232,8 @@ class PoseEstimator:
             l_after = self._verifier.align_loss(
                 ex["crop"], ex["mask_crop"], K_crop, Rc, tc)
             if l_after > l_before:
-                return R, t
-        return Rc, tc
+                return R, t, last_inl
+        return Rc, tc, last_inl
 
     # ------------------------------------------------------------------
     def _guided_refine(self, ex: Dict, K_query: np.ndarray,
@@ -1627,20 +1633,27 @@ class PoseEstimator:
                 # ADD 相关性弱，净换坏。gate>0 时只接受比 best 种子
                 # 显著更优（相对改善 ≥ gate）的候选，否则保持 best。
                 gate = float(s_cfg.get("iter_align_multi_gate", 0.0) or 0.0)
-                # 择优指标（08-12 通用化）：align=光度 align_loss（现状）；
-                # iou=渲染掩码 IoU（几何量，与 ADD 相关性更强，弱纹理
-                # 物体鲁棒）。gate duck 46.67≈基线证明光度门控挡收益
-                # （正确种子 align_loss 优势 <5% 但 ADD 优势大），换几何
-                # 门控：候选 iou 须 > best 种子 iou + iou_gate 才替换。
-                sel_iou = (s_cfg.get("iter_align_multi_select", "align")
-                           == "iou")
+                # 择优指标（08-12 通用化系列）：
+                #   align  = 光度 align_loss（现状，multi 原版）
+                #   gate   = align_loss + 相对门控（6d-multi-gate，判负：
+                #            正确种子光度优势 <5% 被挡）
+                #   iou    = 渲染掩码 IoU 几何门控（6d-multi-iou，ape 仍负：
+                #            FastSAM 掩码偏差污染 IoU）
+                #   inlier = PnP 内点数（纯几何，ia 基线选 best 同源指标，
+                #            与 ADD 相关性最直接；候选须比 best 种子多
+                #            inl_gate 个内点才替换）
+                sel = s_cfg.get("iter_align_multi_select", "align")
+                sel_iou = sel == "iou"
+                sel_inl = sel == "inlier"
                 iou_gate = float(s_cfg.get(
                     "iter_align_multi_iou_gate", 0.02) or 0.02)
+                inl_gate = int(s_cfg.get(
+                    "iter_align_multi_inl_gate", 500) or 0)
                 la_best_seed = None
                 for s in seeds:
                     R_s, t_s = np.asarray(s.R), np.asarray(s.t)
-                    R_i, t_i = self._iter_align(chosen_ex, K_query,
-                                                R_s, t_s)
+                    R_i, t_i, n_i = self._iter_align(chosen_ex, K_query,
+                                                     R_s, t_s)
                     if R_i is None:
                         continue
                     x0, y0, _, _ = chosen_ex["crop_box_used"]
@@ -1660,7 +1673,17 @@ class PoseEstimator:
                                 K_crop, R_r, t_r)
                             if la_post <= la_pre:
                                 R_i, t_i = R_r, t_r
-                    if sel_iou:
+                    if sel_inl:
+                        la = float(n_i)
+                        if s is best:
+                            la_best_seed = la
+                            best_la, best_r = la, (R_i, t_i)
+                            continue
+                        if la_best_seed is None:
+                            continue
+                        if la >= la_best_seed + inl_gate:
+                            best_la, best_r = la, (R_i, t_i)
+                    elif sel_iou:
                         la = self._verifier.mask_iou(
                             R_i, t_i, K_crop, chosen_ex["mask_crop"])
                         if s is best:
@@ -1694,7 +1717,7 @@ class PoseEstimator:
                             best_la, best_r = la, (R_i, t_i)
                 R_c, t_c = best_r
             else:
-                R_i, t_i = self._iter_align(chosen_ex, K_query, R_c, t_c)
+                R_i, t_i, _n = self._iter_align(chosen_ex, K_query, R_c, t_c)
                 if not (np.allclose(R_i, R_c) and np.allclose(t_i, t_c)):
                     R_c, t_c = R_i, t_i
             timings["iter_align"] = time.time() - t0
