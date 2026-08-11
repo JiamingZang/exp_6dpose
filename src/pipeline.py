@@ -1461,7 +1461,7 @@ class PoseEstimator:
             m_cfg = self.cfg["matching"]
             fb_matches, (fb_sx, fb_sy), fb_scores = self.matcher.match(
                 ex["crop"], ex["mask_crop"],
-                top_k=len(getattr(self.bank, "alphas", []) or []),
+                top_k=len(self.bank.alphas),
                 sim_threshold=float(m_cfg.get("sim_threshold", 0.3)),
                 cycle_tau_px=float(m_cfg.get("cycle_tau_px", 5.0)),
                 n_sample=int(m_cfg.get("n_sample_corr", 4096)),
