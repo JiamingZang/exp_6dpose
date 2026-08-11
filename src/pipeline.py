@@ -1364,7 +1364,7 @@ class PoseEstimator:
     # ------------------------------------------------------------------
     def _solve(self, ex: Dict, K_query: np.ndarray,
                return_candidates: bool = False, frame_id=None,
-               prev_pose=None) -> EstimateResult:
+               prev_pose=None, _depth: int = 0) -> EstimateResult:
         """阶段 3（求解优化）：逐模板 PnP → 择优 → 联合 PnP 精化 → refiner。
 
         消费 extract_matches() 的产物（也可从落盘 npz 重建后传入，见
@@ -1449,6 +1449,48 @@ class PoseEstimator:
             timings["render_select"] = time.time() - t0
         else:
             rs_triggered, rs_iou = False, 1.0
+
+        # ---- 自适应全解码（6d-fallback-decode）：渲染验证失败帧第二意见 ----
+        # 36.2% 失败帧 R>60° 选错模板（正确模板可能在 DINOv2 top-40 池外）；
+        # duck 全解码历史收益 +6.67（6d-cand-pool 干净口径）。只在渲染验证
+        # 触发（IoU 低）时对全部模板重匹配重解，渲染对齐损失择优；递归保护
+        # （_depth）防自触发。代价：失败帧 ~22% 付全解码（+3.7s）与重求解。
+        if (rs_triggered and _depth == 0
+                and bool(s_cfg.get("fallback_decode", False))):
+            t0 = time.time()
+            m_cfg = self.cfg["matching"]
+            fb_matches, (fb_sx, fb_sy), fb_scores = self.matcher.match(
+                ex["crop"], ex["mask_crop"],
+                top_k=len(getattr(self.bank, "alphas", []) or []),
+                sim_threshold=float(m_cfg.get("sim_threshold", 0.3)),
+                cycle_tau_px=float(m_cfg.get("cycle_tau_px", 5.0)),
+                n_sample=int(m_cfg.get("n_sample_corr", 4096)),
+                rng=self.rng, prefilter_order=None)
+            if fb_matches:
+                ex_fb = dict(ex)
+                ex_fb["matches"] = fb_matches
+                ex_fb["sxy"] = (fb_sx, fb_sy)
+                res_fb = self._solve(ex_fb, K_query,
+                                     return_candidates=False,
+                                     frame_id=frame_id,
+                                     prev_pose=prev_pose, _depth=1)
+                if res_fb.success:
+                    x0, y0, _, _ = ex["crop_box_used"]
+                    K_crop = K_query.copy()
+                    K_crop[0, 2] -= x0
+                    K_crop[1, 2] -= y0
+                    l_cur = self._verifier.align_loss(
+                        ex["crop"], ex["mask_crop"], K_crop,
+                        best.R, best.t)
+                    l_fb = self._verifier.align_loss(
+                        ex["crop"], ex["mask_crop"], K_crop,
+                        res_fb.R, res_fb.t)
+                    if l_fb < l_cur:
+                        best = SimpleNamespace(
+                            R=res_fb.R, t=res_fb.t,
+                            n_inliers=getattr(res_fb, "n_inliers", 0),
+                            template_idx=-1)
+                timings["fallback_decode"] = time.time() - t0
 
         # ---- 备选候选：逐候选 PnP + 渲染验证消歧 ----
         chosen, chosen_ex = best, ex

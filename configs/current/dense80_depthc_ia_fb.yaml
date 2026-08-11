@@ -1,0 +1,10 @@
+# 自适应全解码（6d-fallback-decode）：渲染验证失败帧第二意见
+# 与 champion（dense80_depthc_ia）唯一差异 = solver.fallback_decode: true
+# 背景（08-11 挑战 3）：36.2% 失败帧 R>60° 选错模板（正确模板可能在被
+# DINOv2 top-40 预筛挤出池外）；duck 全解码历史收益 +6.67（6d-cand-pool
+# 干净口径）。只在渲染验证触发（mask IoU 低）时对全部模板重匹配重解，
+# 渲染对齐损失择优（递归保护防自触发）。代价：~22% 失败帧付全解码。
+base: dense80_depthc_ia.yaml
+
+solver:
+  fallback_decode: true
