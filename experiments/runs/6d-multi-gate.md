@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-multi-gate` |
 | Owner | `qoder` |
-| Status | `queued` |
-| Started | 待 multi-ext phone 完成后 |
-| Finished | — |
+| Status | `done` |
+| Started | `2026-08-12 00:44` |
+| Finished | `2026-08-12 01:06`（判负信号中止，duck 66/120 滚动 45.45）|
 | Queue row | `experiments/QUEUE.md::6d-multi-gate` |
 
 ## Question
@@ -47,26 +47,27 @@ done
 - `08-12 00:1x`：multi-ext 泛化失败触发（ape -10.00 / holepuncher -13~15），
   逐帧诊断 ape 95/120 帧换种子；实现门控（iter_align_multi_gate），
   202 测试过；配置 multigate（gate=0.05）。
-- `08-12`：入队（等 phone 完成后跑 5 弱物体）。
+- `08-12 00:44`：启动（等 phone 完成后）。
+- `08-12 01:06`：duck 66/120 滚动 45.45 ≈ 基线 47.50——**光度门控把
+  收益也挡掉**（正确种子 align_loss 优势 <5% 但 ADD 优势大）；判负
+  信号已足，中止队列切换几何化指标（6d-multi-iou）。
 
 ## Result
 
-| 物体 | ia 基线 | multi | gate (this run) | delta vs multi |
-|---|---:|---:|---:|---:|
-| duck | 47.50 | 55.83 |  |  |
-| ape | 59.17 | 49.17 |  |  |
-| cat | 64.17 | 75.00 |  |  |
-| holepuncher | 56.67 | ~43 |  |  |
-| phone | 77.5 | 待 |  |  |
+| 指标 | ia 基线 | multi | gate (this run) | delta vs multi |
+|---|---:|---:|---:|---|
+| duck（滚动 66/120）| 47.50 | 55.83 | ~45.5 | **-10** |
 
 ## Decision
 
-- 结论：待跑（queued）
-- 原因：通用原则——多假设择优必须有拒绝域（噪声尺度内的损失差不构成
-  替换依据）；gate=0 保持原 multi 行为（向后兼容），gate=0.05 是修复档。
-- 下一步：5 弱物体出炉后按 success line 判定；若 gate 保留有货收益 +
-  消除没货损失 → 泛化成立，扩全量 13 物体
-- 产物：`outputs/exp_multigate/results/*.json`
+- 结论：`drop`（门控方向对、指标错）
+- 原因：拒绝域原则正确（multi-ext 证明无条件换种子净换坏），但拒绝域
+  必须建在**几何量**（渲染掩码 IoU）而非**光度量**（align_loss）上——
+  弱纹理物体 align_loss 与 ADD 相关性弱：正确种子 align_loss 优势
+  <5%（噪声内），门控阈值 0.05 把真收益也挡掉，gate 档结果 ≈ 单假设
+  基线。通用教训：**择优/门控基准的选择比门控本身更重要**。
+- 下一步：6d-multi-iou（几何拒绝域）——已启动
+- 产物：无（中途中止，滚动数据见 Live Log）
 
 ## Sync Checklist
 
