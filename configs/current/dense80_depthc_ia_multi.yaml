@@ -1,0 +1,9 @@
+# 多初始假设 iter_align（6d-ia-multi）：池内 top-k 位姿各跑 iter_align
+# 与 champion（dense80_depthc_ia）唯一差异 = solver.iter_align_multi_hypo: 5
+# 背景（08-11 挑战 3：模板离散化/选错模板）：36.2% 失败帧 R>60°（粗位姿
+# 远离 GT 最近模板 100%），单假设 iter_align 从错误盆出发救不回；
+# 从池内 top-5 位姿各跑 1 轮，渲染对齐损失择优（iG-6DoF 多候选初始化同思路）。
+base: dense80_depthc_ia.yaml
+
+solver:
+  iter_align_multi_hypo: 5

@@ -1541,11 +1541,38 @@ class PoseEstimator:
 
         # ---- 迭代渲染对齐（6d-iter-align）：当前位姿重渲染新视角 →
         # MASt3R 再匹配 → 重解 PnP（接受/拒绝逻辑在 _iter_align 内部）----
+        # iter_align_multi_hypo（08-11 挑战 3：模板离散化/选错模板）：
+        # 36.2% 失败帧 R>60°（粗位姿远离 GT 最近模板），单假设 iter_align
+        # 从错误盆出发救不回；改为从池内 top-k 位姿各跑 1 轮，渲染对齐
+        # 损失择优（iG-6DoF 多候选初始化同思路）。
         if int(s_cfg.get("iter_align_iters", 0) or 0) > 0:
             t0 = time.time()
-            R_i, t_i = self._iter_align(chosen_ex, K_query, R_c, t_c)
-            if not (np.allclose(R_i, R_c) and np.allclose(t_i, t_c)):
-                R_c, t_c = R_i, t_i
+            mh = int(s_cfg.get("iter_align_multi_hypo", 0) or 0)
+            if mh > 0:
+                ranked = rank_candidates(
+                    results, strategy=s_cfg.get("selection", "inlier"))
+                seeds = [best] + [r for r in ranked[:mh] if r is not best]
+                best_la, best_r = float("inf"), (R_c, t_c)
+                for s in seeds:
+                    R_s, t_s = np.asarray(s.R), np.asarray(s.t)
+                    R_i, t_i = self._iter_align(chosen_ex, K_query,
+                                                R_s, t_s)
+                    if R_i is None:
+                        continue
+                    x0, y0, _, _ = chosen_ex["crop_box_used"]
+                    K_crop = K_query.copy()
+                    K_crop[0, 2] -= x0
+                    K_crop[1, 2] -= y0
+                    la = self._verifier.align_loss(
+                        chosen_ex["crop"], chosen_ex["mask_crop"],
+                        K_crop, R_i, t_i)
+                    if la < best_la:
+                        best_la, best_r = la, (R_i, t_i)
+                R_c, t_c = best_r
+            else:
+                R_i, t_i = self._iter_align(chosen_ex, K_query, R_c, t_c)
+                if not (np.allclose(R_i, R_c) and np.allclose(t_i, t_c)):
+                    R_c, t_c = R_i, t_i
             timings["iter_align"] = time.time() - t0
 
         R_out, t_out = self._to_model_frame(R_c, t_c)
@@ -1640,12 +1667,19 @@ class PoseEstimator:
                     if (bool(s_cfg.get("tz_depth", False))
                             and ex.get("depth_img") is not None):
                         depth = np.asarray(ex["depth_img"])
-                        x0d, y0d, wd, hd = chosen_ex["crop_box_used"]
-                        if (0 <= x0d and 0 <= y0d
-                                and y0d + hd <= depth.shape[0]
-                                and x0d + wd <= depth.shape[1]):
-                            d_crop = depth[y0d:y0d + hd, x0d:x0d + wd]
-                            vals = d_crop[mask > 0]
+                        loc = ex.get("loc")
+                        full_mask = None
+                        if loc is not None and getattr(loc, "mask", None) is not None:
+                            full_mask = np.asarray(loc.mask) > 0
+                        if full_mask is None:
+                            full_mask = np.zeros(depth.shape[:2], dtype=bool)
+                            x0d, y0d, x1d, y1d = chosen_ex["crop_box_used"]
+                            x0d, y0d = int(x0d), int(y0d)
+                            x1d = min(int(x1d), depth.shape[1])
+                            y1d = min(int(y1d), depth.shape[0])
+                            full_mask[y0d:y1d, x0d:x1d] = True
+                        if full_mask.shape == depth.shape[:2]:
+                            vals = depth[full_mask]
                             vals = vals[np.isfinite(vals) & (vals > 0)]
                             if len(vals) >= 16:
                                 z_med = float(np.median(vals))
