@@ -1353,7 +1353,8 @@ class PoseEstimator:
 
     # ------------------------------------------------------------------
     def _solve(self, ex: Dict, K_query: np.ndarray,
-               return_candidates: bool = False, frame_id=None) -> EstimateResult:
+               return_candidates: bool = False, frame_id=None,
+               prev_pose=None) -> EstimateResult:
         """阶段 3（求解优化）：逐模板 PnP → 择优 → 联合 PnP 精化 → refiner。
 
         消费 extract_matches() 的产物（也可从落盘 npz 重建后传入，见
@@ -1548,10 +1549,17 @@ class PoseEstimator:
         if int(s_cfg.get("iter_align_iters", 0) or 0) > 0:
             t0 = time.time()
             mh = int(s_cfg.get("iter_align_multi_hypo", 0) or 0)
-            if mh > 0:
+            track_on = bool(s_cfg.get("track_seed", False))
+            if mh > 0 or (track_on and prev_pose is not None):
                 ranked = rank_candidates(
                     results, strategy=s_cfg.get("selection", "inlier"))
                 seeds = [best] + [r for r in ranked[:mh] if r is not best]
+                if track_on and prev_pose is not None:
+                    R_p, t_p = np.asarray(prev_pose[0]), np.asarray(prev_pose[1])
+                    if np.all(np.isfinite(R_p)) and np.all(np.isfinite(t_p)):
+                        seeds.append(SimpleNamespace(R=R_p, t=t_p,
+                                                     n_inliers=0,
+                                                     template_idx=-1))
                 best_la, best_r = float("inf"), (R_c, t_c)
                 for s in seeds:
                     R_s, t_s = np.asarray(s.R), np.asarray(s.t)
@@ -1727,15 +1735,18 @@ class PoseEstimator:
     def estimate(self, img_rgb_u8: np.ndarray, K_query: np.ndarray,
                  gt_bbox=None, gt_mask=None,
                  return_candidates: bool = False, frame_id=None,
-                 depth_img=None) -> EstimateResult:
-        """单帧 6D 位姿估计（阶段 2 extract_matches + 阶段 3 _solve）。"""
+                 depth_img=None, prev_pose=None) -> EstimateResult:
+        """单帧 6D 位姿估计（阶段 2 extract_matches + 阶段 3 _solve）。
+
+        prev_pose: (R, t) 前一帧最终位姿（模型系，w2c），tracking 种子用。
+        """
         ex = self.extract_matches(img_rgb_u8, K_query,
                                   gt_bbox=gt_bbox, gt_mask=gt_mask,
                                   frame_id=frame_id, depth_img=depth_img)
         if ex is None:
             return EstimateResult(success=False, timings={})
         return self._solve(ex, K_query, return_candidates=return_candidates,
-                           frame_id=frame_id)
+                           frame_id=frame_id, prev_pose=prev_pose)
 
     def _to_model_frame(self, R: np.ndarray, t: np.ndarray):
         """PnP 输出 → 原始模型单位 + VGGT→CAD 对齐（最终输出坐标系）。
@@ -1974,6 +1985,7 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
 
     per_frame, all_timings = [], []
     cand_adds_all, cand_projs_all = [], []   # topK best 用的逐候选误差
+    prev_pose = None   # 帧间 tracking 种子（前一帧成功才更新）
     # 帧级缓存（断点续跑）：cache[frame_id] = 该帧完整结果。
     # 缓存带内容指纹（matches_dir + 配置哈希）：任何输入变化（换 matches、
     # 换 bank、换 PnP 参数）都会让旧缓存整体作废——只按 frame_id 复用会
@@ -2071,7 +2083,8 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
                                      gt_mask=gt_mask,
                                      return_candidates=bool(topk_ks),
                                      frame_id=fr.frame_id,
-                                     depth_img=depth_img)
+                                     depth_img=depth_img,
+                                     prev_pose=prev_pose)
         if res.success:
             m = evaluate_pose(
                 model_pts, ds.diameter, fr.K, fr.R_gt, fr.t_gt, res.R, res.t,
@@ -2108,6 +2121,8 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
             })
         per_frame.append(m)
         all_timings.append(res.timings)
+        if res.success and bool(cfg["solver"].get("track_seed", False)):
+            prev_pose = (res.R, res.t)
         c_adds, c_projs = [], []
         if topk_ks:
             # 逐候选评估：每个候选独立算 ADD/Proj，之后同步选择；

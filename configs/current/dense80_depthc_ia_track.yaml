@@ -1,0 +1,12 @@
+# 帧间 tracking 种子（6d-track-seed）：前一成功帧位姿作 iter_align 种子
+# 与 champion（dense80_depthc_ia）唯一差异 = solver.track_seed: true
+# 背景（08-11 时间分布分析）：失败帧高度成簇（duck 孤立仅 14%、最长连续
+# 段 19 帧；holepuncher 最长 25 帧）——视角片段级场景问题（光照/背景随
+# 相机位置连续变化）。段起始帧用前一成功帧位姿初始化 iter_align（渲染
+# 视角连续 → MASt3R 匹配质量高），可能阻止整段失败。
+# ⚠ 视频模式（用序列时间信息）：BOP 官方评测逐帧独立，仅作论文视频扩展
+# 章节实验，主表保持单帧口径。
+base: dense80_depthc_ia.yaml
+
+solver:
+  track_seed: true
