@@ -1459,7 +1459,7 @@ class PoseEstimator:
                 and bool(s_cfg.get("fallback_decode", False))):
             t0 = time.time()
             m_cfg = self.cfg["matching"]
-            fb_matches, (fb_sx, fb_sy), fb_scores = self.matcher.match(
+            fb_matches, (fb_sx, fb_sy), fb_scores, _ = self.matcher.match(
                 ex["crop"], ex["mask_crop"],
                 top_k=len(self.bank.alphas),
                 sim_threshold=float(m_cfg.get("sim_threshold", 0.3)),
