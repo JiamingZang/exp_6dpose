@@ -766,6 +766,16 @@ class PoseEstimator:
         prefilter_order = resolve_prefilter_order(
             self._template_prescreen, self._template_ranking,
             loc.template_order)
+        # 预筛多样性（matching.prescreen_mmr > 0，08-11 挑战 3）：
+        # DINOv2 CLS 相近视角模板高相关，冗余占用 top-k 名额；MMR 贪心
+        # 重排（相似 + 互异），攻击"正确模板被挤出池"（36.2% 选错模板帧）。
+        mmr_lam = float(m_cfg.get("prescreen_mmr", 0.0) or 0.0)
+        if (mmr_lam > 0 and prefilter_order is not None
+                and loc.template_sims is not None):
+            from .detection.localize import mmr_reorder
+            prefilter_order = mmr_reorder(
+                prefilter_order, loc.template_sims,
+                self.bank.dino_feats, int(m_cfg.get("top_k", 40)), mmr_lam)
         matches, (sx, sy), _scores, top_full = self.matcher.match(
             crop, mask_crop,
             top_k=int(m_cfg.get("top_k", 40)),

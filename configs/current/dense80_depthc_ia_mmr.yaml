@@ -1,0 +1,9 @@
+# 预筛多样性 MMR（6d-prescreen-mmr）：DINOv2 top-k 相似+互异重排
+# 与 champion（dense80_depthc_ia）唯一差异 = matching.prescreen_mmr: 0.7
+# 背景（08-11 挑战 3）：36.2% 失败帧 R>60° 选错模板；DINOv2 CLS 相近
+# 视角模板高相关（冗余），冗余模板挤占 top-40 名额，正确视角被挤出池。
+# MMR 贪心：top-1 保底最相似，后续 λ·sim(q,t) - (1-λ)·max(模板互斥) 权衡。
+base: dense80_depthc_ia.yaml
+
+matching:
+  prescreen_mmr: 0.7

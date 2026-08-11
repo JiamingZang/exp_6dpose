@@ -84,6 +84,34 @@ def template_similarity_order(feat: np.ndarray, template_feats: np.ndarray):
     return order.astype(np.int64), sims[order]
 
 
+def mmr_reorder(order: np.ndarray, sims: np.ndarray,
+               template_feats: np.ndarray, k: int, lam: float) -> np.ndarray:
+    """最大边际相关重排预筛序（08-11 挑战 3：检索冗余挤占池名额）。
+
+    贪心：已选集合 S，每步选 argmax(λ·sim(q,t) - (1-λ)·max_{s∈S} cos(t,s))。
+    top-1 固定为最相似模板（保底质量），后续在相似与互异间权衡——
+    相近视角模板（DINOv2 CLS 高相关）不再同时占名额，召回更广视角。
+    """
+    k = max(int(k), 1)
+    T = template_feats / np.maximum(
+        np.linalg.norm(template_feats, axis=1, keepdims=True), 1e-8)
+    sim_tt = T @ T.T
+    sim_q = np.asarray(sims, dtype=np.float64)
+    selected = [int(order[0])]
+    cand = [int(i) for i in order[1:] if int(i) != selected[0]]
+    while len(selected) < k and cand:
+        best_i, best_v = -1, -float("inf")
+        for i in cand:
+            v = lam * sim_q[i] - (1.0 - lam) * max(
+                sim_tt[i, j] for j in selected)
+            if v > best_v:
+                best_v, best_i = v, i
+        selected.append(best_i)
+        cand.remove(best_i)
+    rest = [int(i) for i in order if int(i) not in selected]
+    return np.array(selected + rest, dtype=np.int64)
+
+
 def expand_bbox(bbox_xywh, expand: float, img_w: int, img_h: int):
     """bbox 四周按边长比例扩 expand（默认 20%），并裁剪到图像范围内。"""
     x, y, w, h = [float(v) for v in bbox_xywh]
@@ -182,6 +210,8 @@ class Localization:
     # DINOv2 相似度降序模板下标（Top-K 预筛用；gt_bbox/gt_mask
     # 无 DINOv2 检索时为 None，此时匹配器回退到 MASt3R 全解码排序）
     template_order: Optional[np.ndarray] = None
+    # 与 template_order 同序的余弦相似度（MMR 多样性预筛用，08-11）
+    template_sims: Optional[np.ndarray] = None
     # 按分数降序的 top-K 候选掩码（渲染验证消歧用，见 loc_n_candidates）。
     # 每项 {"mask","bbox_xywh","score","template_order"}；主候选 = 第一项。
     candidates: List[Dict] = field(default_factory=list)
@@ -356,7 +386,7 @@ class SamDinoLocalizer:
         score, seg, bbox, feat = scored[0]
         # 定位阶段已算出的相似度直接复用为 Top-K 预筛排序，
         # best_template = 排序第一
-        order, _ = template_similarity_order(feat, template_feats)
+        order, sims = template_similarity_order(feat, template_feats)
         crop_box = expand_bbox(bbox, float(self.cfg.get("bbox_expand", 0.2)),
                                w, h)
         candidates = []
@@ -448,7 +478,7 @@ class GtBboxLocalizer:
             crop = crop.copy()
             crop[~seg_crop] = int(round(self.bg * 255))
             feat = self.dino_embedder.cls_features([crop])[0]
-            order, _ = template_similarity_order(feat, self.template_feats)
+            order, sims = template_similarity_order(feat, self.template_feats)
         return Localization(mask=gt_mask.astype(bool), crop_box=crop_box,
                             score=1.0, best_template=-1,
                             template_order=order)
