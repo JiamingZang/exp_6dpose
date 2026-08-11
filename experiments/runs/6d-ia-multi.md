@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-ia-multi` |
 | Owner | `qoder` |
-| Status | `running` |
+| Status | `done` |
 | Started | `2026-08-11 14:55` |
-| Finished | `<YYYY-MM-DD HH:MM 或 empty>` |
+| Finished | `2026-08-11 16:34` |
 | Queue row | `experiments/QUEUE.md::6d-ia-multi` |
 
 ## Question
@@ -45,18 +45,30 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia_mu
 - `08-11 14:55`：实现（iter_align_multi_hypo 开关 + top-k 种子 + align_loss 择优），
   202 测试过；文献支撑（iG-6DoF CVPR'25 多候选初始化、6DGS ECCV'24）。
 - `08-11 14:59`：队列挂载（等 t-only 完成后自动启动）。
+- `08-11 15:55`：启动（duck 120 帧）。
+- `08-11 16:26`：96/120 帧滚动 58.33（+10.8）；效率实测 +2%（iter_align
+  5 种子 +2.3s，被 refiner 早停省回 ~2.1s——好位姿收敛快）。
+- `08-11 16:34`：**出炉 55.83（+8.33）**。
 
 ## Result
 
 | 指标 | baseline | this run | delta | note |
 |---|---:|---:|---:|---|
-|  |  |  |  |  |
+| ADD | 47.50 | 55.83 | **+8.33** | 端到端（align_loss 择优，非 GT oracle）|
+| Proj@5px | 81.67 |  |  |  |
+| 单帧耗时 | 10.31s | 10.54s | +2% | refiner 早停抵消 |
 
 ## Decision
 
-- 结论：`keep/reject/retry/blocked`
+- 结论：`keep`（**多初始假设 iter_align 有效，挑战 3 首正**）
 - 原因：
-- 下一步：
+  1. 池内 top-5 位姿各跑 iter_align + 渲染对齐损失择优 → duck +8.33，
+     36.2% R>60° 选错模板帧部分救回（多个中间视角种子提供正确盆入口）；
+  2. 端到端口径（align_loss 推理可用，非 GT 择优）；效率 +2% 几乎免费；
+  3. 待验证：track（时间种子）/ mmr（池多样性）/ fb（失败全解码）能否
+     叠加；扩 5 弱物体确认泛化。
+- 下一步：multi 扩 5 弱物体全量验证（挂队列尾部）；与 track/mmr/fb 组合
+- 产物：`outputs/exp_multi/results/duck.json`
 
 ## Sync Checklist
 

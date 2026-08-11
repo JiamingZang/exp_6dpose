@@ -44,7 +44,7 @@
 | dense80_depthc_ia_topk.yaml | done | 6d-gap-oracle 候选池 oracle 上界（champion + metrics.topk_best [1,3,5,40]）：top40 池内 GT 择优 62.0 ≈ 端到端 61.2 → 候选池生成是总瓶颈；duck/cat 池有货选择倒挂、ape/phone 优化净赚 |
 | dense80_depthc_ia_geocand{,_gtmask}.yaml | done | 6d-mask-geo 掩码几何平移候选判负：duck FastSAM 44.17（-3.33）/ GT 掩码 45.00（-6.67 vs GT 掩码档 51.67）——机制无效非掩码拖累；代码保留（开关默认关）|
 | dense80_depthc_ia_tzdepth.yaml / dense80_depthc_ia_tonly.yaml | running | 6d-tz-depth 平移校正两档：深度档（BOP 中值 z，消融）/ RGB-only 档（refine_stage1_iters 200 + 面积正则，主线可部署）|
-| dense80_depthc_ia_multi.yaml | running | 6d-ia-multi 多初始假设 iter_align（iter_align_multi_hypo: 5，池内 top-k 各跑 + align_loss 择优）——挑战 3 选错模板帧 |
+| dense80_depthc_ia_multi.yaml | done | 6d-ia-multi 多初始假设 iter_align 通过：duck 55.83（+8.33，端到端）；效率 +2%；挑战 3 首正，扩 5 弱物体 |
 | dense80_depthc_mh.yaml / dense80_tzsearch.yaml / dense80_batch16.yaml / dense80_depth03_w1.yaml | archived | 过程变体 |
 | legacy_mypose.yaml | archived | 旧管线复刻对照（README §8 口径警告）|
 | experiments/dense80_gtmask.yaml | current | GT 掩码检索上界分析 |

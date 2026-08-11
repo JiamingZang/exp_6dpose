@@ -27,7 +27,7 @@
 | 6d-gap-oracle（已结案 08-11）| 候选池 vs 选择损失：top40 池内 GT 择优 62.0 ≈ 端到端 61.2（+0.8）——**候选池生成是总瓶颈**；分型：duck/cat 池有货选择倒挂、ape/phone 池没货优化净赚 |
 | 6d-mask-geo（已结案 08-11）| 掩码几何平移候选判负（duck FastSAM -3.33 / GT 掩码 -2.50）：机制无效非掩码拖累；失败帧再分解：48.5% 旋转对 t 错（tz 仅 35 帧、xy 错 1556 帧、GT t 替换 100% 恢复）→ 平移病态实为 xy；BOP 深度图可用（从未用于推理）|
 | 6d-tz-depth（在跑，08-11 14:29）| 平移病态两档：深度档（BOP 中值 z，消融 42 帧滚动 52.38 早期正）+ RGB-only 档（refiner 阶段 1 t-only 加强，主线可部署）；tzxy 质心对齐判负（45.83）|
-| 6d-ia-multi（在跑，08-11 14:55）| 挑战 3 多初始假设 iter_align（top-5 种子 + 渲染择优），攻 36.2% R>60° 选错模板帧；文献 iG-6DoF/6DGS；队列 t-only 之后 |
+| 6d-ia-multi（已结案 08-11，**+8.33**）| 挑战 3 多初始假设 iter_align 有效：duck 55.83（+8.33，端到端 align_loss 择优），36.2% 选错模板帧部分救回；效率 +2% 几乎免费；扩 5 弱物体验证中 |
 | 6d-pnp-multisol（todo）| 挑战 2：EPro-PnP 式 RANSAC 多 t 解 + 渲染择优（弱纹理 PnP 多解性）|
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
