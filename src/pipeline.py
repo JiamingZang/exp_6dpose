@@ -1665,8 +1665,9 @@ class PoseEstimator:
                             R_i, t_i, K_crop, chosen_ex["mask_crop"])
                         if s is best:
                             la_best_seed = la
-                            if la > best_la:
-                                best_la, best_r = la, (R_i, t_i)
+                            # best 种子无条件接受（best_la 初始 inf 是
+                            # align_loss 语义，iou 越大越好——直接覆盖）
+                            best_la, best_r = la, (R_i, t_i)
                             continue
                         if la_best_seed is None:
                             continue
