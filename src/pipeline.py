@@ -19,6 +19,7 @@ import time
 import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Dict, List, Optional
 
 import cv2
@@ -1315,6 +1316,39 @@ class PoseEstimator:
                 best_loss, best = loss, (R_r, t_r)
         return best
 
+    def _mask_geo_translation(self, ex: Dict, K_query: np.ndarray,
+                              template_idx) -> Optional[np.ndarray]:
+        """掩码几何解析平移（GS-Pose §3.2 面积比 + 中心反投影）。
+
+        z 由掩码面积比定尺度（模板球面半径已知：z_q = z_ref·sqrt(A_q/A_ref)），
+        xy 由查询掩码质心反投影。旋转由调用方提供，只替换平移——对症
+        RANSAC 深度病态（小物体 tz 错 30-40mm 重投影偏移 <5px 不可分辨；
+        全量失败帧 48.5% 纯 t 错，gap 分解 08-11）。返回 None 表示无法构造。
+        """
+        bank = self.bank
+        alpha = None
+        if (template_idx is not None and template_idx >= 0
+                and getattr(bank, "alphas", None) is not None
+                and template_idx < len(bank.alphas)):
+            alpha = np.asarray(bank.alphas[template_idx])
+        if alpha is None:
+            return None
+        mask = np.asarray(ex["mask_crop"]) > 0
+        A_q = float(mask.sum())
+        A_ref = float((alpha > 0.5).sum())
+        if A_q < 16 or A_ref < 16:
+            return None
+        z_ref = float(np.linalg.norm(bank.poses[template_idx][:3, 3]))
+        if not np.isfinite(z_ref) or z_ref <= 0:
+            return None
+        z_q = z_ref * np.sqrt(A_q / A_ref)
+        x0, y0, _, _ = ex["crop_box_used"]
+        my, mx = np.nonzero(mask)
+        cx_g = float(mx.mean()) + x0
+        cy_g = float(my.mean()) + y0
+        K_inv = np.linalg.inv(np.asarray(K_query, dtype=np.float64))
+        return K_inv @ np.array([cx_g * z_q, cy_g * z_q, z_q])
+
     # ------------------------------------------------------------------
     def _solve(self, ex: Dict, K_query: np.ndarray,
                return_candidates: bool = False, frame_id=None) -> EstimateResult:
@@ -1405,6 +1439,30 @@ class PoseEstimator:
 
         # ---- 备选候选：逐候选 PnP + 渲染验证消歧 ----
         chosen, chosen_ex = best, ex
+        # ---- 掩码几何候选（6d-mask-geo）：模板旋转 + 掩码面积/质心解析平移 ----
+        # RANSAC 深度病态（小物体 tz 错 30-40mm 重投影 <5px 不可分辨）使 PnP
+        # 平移不可靠（全量失败帧 48.5% 纯 t 错）；掩码面积比 z + 质心 xy 直接
+        # 来自掩码几何（GS-Pose §3.2 同款）。作为候选与 PnP 结果用渲染对齐
+        # 损失竞争，不进 IoU 接受门（tz_search 判据不可分结案）。
+        if (bool(s_cfg.get("mask_geo_candidate", False))
+                and self._verifier is not None):
+            t0 = time.time()
+            t_geo = self._mask_geo_translation(ex, K_query,
+                                               best.template_idx)
+            if t_geo is not None:
+                x0, y0, _, _ = ex["crop_box_used"]
+                K_crop = K_query.copy()
+                K_crop[0, 2] -= x0
+                K_crop[1, 2] -= y0
+                l_pnp = self._verifier.align_loss(
+                    ex["crop"], ex["mask_crop"], K_crop, best.R, best.t)
+                l_geo = self._verifier.align_loss(
+                    ex["crop"], ex["mask_crop"], K_crop, best.R, t_geo)
+                if l_geo < l_pnp:
+                    chosen = SimpleNamespace(
+                        R=best.R, t=t_geo, n_inliers=best.n_inliers,
+                        template_idx=best.template_idx)
+            timings["mask_geo"] = time.time() - t0
         if ex.get("alts"):
             alt_solved = []
             for a in ex["alts"]:

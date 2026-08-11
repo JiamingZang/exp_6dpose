@@ -1,0 +1,10 @@
+# 掩码几何候选（6d-mask-geo）：模板旋转 + 掩码面积比/质心解析平移
+# 与 champion（dense80_depthc_ia）唯一差异 = solver.mask_geo_candidate: true
+# 机制：RANSAC 深度病态（tz 错 30-40mm 重投影 <5px）→ PnP 平移不可靠
+# （全量失败帧 48.5% 纯 t 错，08-11 gap 分解）；掩码面积比 z + 质心 xy
+# 直接解析平移（GS-Pose §3.2 同款），与 PnP 结果用渲染对齐损失竞争择优，
+# 不进 IoU 接受门（tz_search 判据不可分结案）。
+base: dense80_depthc_ia.yaml
+
+solver:
+  mask_geo_candidate: true
