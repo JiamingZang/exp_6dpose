@@ -1,0 +1,11 @@
+# 渲染质心对齐 xy-only（6d-tz-xy）：tz_search 拆变量——只做 xy 质心对齐
+# 与 champion（dense80_depthc_ia）唯一差异 = 开启 tz_search 且跳过面积比 z
+# 背景（08-11 gap 分解）：失败帧 48.5% 为"旋转对、xy 平移错"（99.1% 粗位姿
+# R≤10° 但 t 错；GT t 替换 100% 恢复），PnP 对应质心偏 → t 偏。
+# 机制：渲染掩码质心 → 查询掩码质心对齐（t_xy += dc·z），IoU 提升才接受。
+# 面积比 z 是 tz_search 结案（"面积比信号死"）时的破坏源，先拆掉单独验 xy。
+base: dense80_depthc_ia.yaml
+
+solver:
+  tz_search: true
+  tz_search_xy_only: true
