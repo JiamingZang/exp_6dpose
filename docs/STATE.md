@@ -29,7 +29,9 @@
 | 6d-tz-depth（在跑，08-11 14:29）| 平移病态两档：深度档（BOP 中值 z，消融 42 帧滚动 52.38 早期正）+ RGB-only 档（refiner 阶段 1 t-only 加强，主线可部署）；tzxy 质心对齐判负（45.83）|
 | 6d-ia-multi（已结案 08-11，**+8.33**）| 挑战 3 多初始假设 iter_align 有效：duck 55.83（+8.33，端到端 align_loss 择优），36.2% 选错模板帧部分救回；效率 +2% 几乎免费；扩 5 弱物体验证中 |
 | 6d-track-seed（已结案 08-11，弱正 +3.33）| 帧间跟踪种子 duck 50.83（基线 47.50 → +3.33）但远低于 multi 55.83——池内多假设优于时间种子；代价 +40% 不划算；BOP 主表逐帧独立，仅论文视频扩展素材 |
-| 6d-multi-refine（todo 08-11）| GS-Pose duck 77.2（refiner +38.4）靶向：把每个种子的优化从匹配+PNP 升级为渲染对比优化（refiner 多种子启动 + 盆底择优 + 精化回退保护）；待 GPU 队列（track→mmr→fb 后）|
+| 6d-multi-refine（已结案 08-11，判负）| 种子级渲染对比优化 duck 49.17（-6.66 vs multi）：refiner 盆底择优失效（ADD -6.66 但 Proj +9.16，渲染自洽非几何正确）——6d-refiner-v2 机制在多种子框架复现；渲染对比优化方向两轮判负结案，差距回填候选池生成 |
+| 6d-prescreen-mmr（已结案 08-11，判负）| MMR 预筛多样性 duck 46.67（-0.83）：预筛阶段两度尝试（扩 K、多样性重排）均无收益——瓶颈在 MASt3R 对应质量本身 |
+| 6d-fallback-decode（已结案 08-11，判负）| 失败帧自适应全解码 duck 46.67（-0.83）：触发帧与全解码收益帧不重合，失败帧付 20.8s 无收益；解码侧结案 |
 | 6d-pnp-multisol（todo）| 挑战 2：EPro-PnP 式 RANSAC 多 t 解 + 渲染择优（弱纹理 PnP 多解性）|
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|

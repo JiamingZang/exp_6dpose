@@ -46,7 +46,9 @@
 | dense80_depthc_ia_tzdepth.yaml / dense80_depthc_ia_tonly.yaml | running | 6d-tz-depth 平移校正两档：深度档（BOP 中值 z，消融）/ RGB-only 档（refine_stage1_iters 200 + 面积正则，主线可部署）|
 | dense80_depthc_ia_multi.yaml | done | 6d-ia-multi 多初始假设 iter_align 通过：duck 55.83（+8.33，端到端）；效率 +2%；挑战 3 首正，扩 5 弱物体 |
 | dense80_depthc_ia_track.yaml | done | 6d-track-seed 帧间跟踪种子：duck 50.83（+3.33 vs 基线）但低于 multi 55.83；代价 +40% 不划算；仅论文视频扩展素材 |
-| dense80_depthc_ia_multirefine.yaml | running | 6d-multi-refine 种子级渲染对比优化（multi + iter_align_seed_refine_iters: 120）：每种子 iter_align 后追加 120 步 refiner 探盆 + 精化回退保护 + align_loss 盆底择优；GS-Pose duck 77.2 靶向 |
+| dense80_depthc_ia_multirefine.yaml | done | 6d-multi-refine 种子级渲染对比优化判负：duck 49.17（-6.66 vs multi）——refiner 盆底择优失效（ADD -6.66 但 Proj +9.16）；渲染对比优化两轮判负结案 |
+| dense80_depthc_ia_mmr.yaml | done | 6d-prescreen-mmr MMR 预筛多样性判负：duck 46.67（-0.83）——预筛阶段结案 |
+| dense80_depthc_ia_fb.yaml | done | 6d-fallback-decode 失败帧自适应全解码判负：duck 46.67（-0.83）——解码侧结案 |
 | dense80_depthc_mh.yaml / dense80_tzsearch.yaml / dense80_batch16.yaml / dense80_depth03_w1.yaml | archived | 过程变体 |
 | legacy_mypose.yaml | archived | 旧管线复刻对照（README §8 口径警告）|
 | experiments/dense80_gtmask.yaml | current | GT 掩码检索上界分析 |
