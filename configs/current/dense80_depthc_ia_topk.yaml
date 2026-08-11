@@ -1,0 +1,9 @@
+# topk oracle 上界（6d-gap-oracle）：候选池内 GT 择优
+# 与 champion（dense80_depthc_ia）唯一差异 = 开 metrics.topk_best [1,3,5,40]：
+# 逐候选独立算 ADD/Proj，K 个候选中按 GT 择优（oracle 上界，非端到端）。
+# top1 档 = 端到端对照（同配置同子集）；top40_best 高而 top1 低 → 选择损失；
+# top40_best 也低 → 候选池生成损失（无好假设）。
+base: dense80_depthc_ia.yaml
+
+metrics:
+  topk_best: [1, 3, 5, 40]

@@ -24,6 +24,7 @@
 |---|---|
 | 6d-ablation-full（优先级 1，待排期）| 论文 §5.3 十组消融全量（run_ablation.py --all）|
 | 6d-ablation-full（优先级 1）| 论文 §3.3 八组消融全量跑齐（run_ablation.py --all），支撑模板库构建+dc2 方法贡献的消融证据 |
+| 6d-gap-oracle（已结案 08-11）| 候选池 vs 选择损失：top40 池内 GT 择优 62.0 ≈ 端到端 61.2（+0.8）——**候选池生成是总瓶颈**；分型：duck/cat 池有货选择倒挂、ape/phone 池没货优化净赚；掩码几何候选（6d-mask-geo）验证中 |
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
 
