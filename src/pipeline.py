@@ -641,7 +641,8 @@ class PoseEstimator:
         return np.random.default_rng(self._rng_seed + int(frame_id))
 
     def extract_matches(self, img_rgb_u8: np.ndarray, K_query: np.ndarray,
-                        gt_bbox=None, gt_mask=None, frame_id=None):
+                        gt_bbox=None, gt_mask=None, frame_id=None,
+                        depth_img=None):
         """阶段 2（粗匹配）：定位 → 裁剪 → MASt3R Top-K 稠密对应。
 
         与 estimate() 的求解段解耦：对应产物可落盘（scripts/analysis/extract_matches.py
@@ -827,7 +828,8 @@ class PoseEstimator:
                 "s_leg": (s_leg_x, s_leg_y),
                 "matches": matches, "sxy": (sx, sy),
                 "top_desc": top_desc,
-                "alts": alts, "timings": timings}
+                "alts": alts, "timings": timings,
+                "depth_img": depth_img}
 
     # ------------------------------------------------------------------
     def _solve_pnp(self, ex: Dict, K_query: np.ndarray):
@@ -1608,6 +1610,10 @@ class PoseEstimator:
         # 3DGS 渲染掩码与 FastSAM 掩码面积存在物体相关系统偏差，直接
         # 面积比会把已准帧拉偏——用校准前后渲染 IoU 做接受判据：IoU
         # 提升才接受（GSPose 面积比给候选、IoU 验方向）。
+        # tz_search_xy_only（08-11 gap 分解后加）：跳过面积比 z，只做
+        # 渲染质心对齐 xy——失败帧 48.5% 为旋转对/xy 平移错（99.1%
+        # 粗位姿 R≤10° 但 t 错，PnP 对应质心偏），xy 对齐直接对症；
+        # 面积比 z 是 tz_search 结案时的破坏源，先拆掉单独验证 xy。
         if (bool(s_cfg.get("tz_search", False))
                 and self._verifier is not None):
             t0 = time.time()
@@ -1627,7 +1633,26 @@ class PoseEstimator:
                     iou_before = self._verifier.mask_iou(
                         R_out, t_out, K_crop, mask)
                     t_cur = t_out.copy()
-                    for _ in range(2):
+                    xy_only = bool(s_cfg.get("tz_search_xy_only", False))
+                    # tz_depth（08-11 弱纹理/平移病态方向）：BOP 深度图真实
+                    # 测量，掩码内深度中值直接替换 z——绕开 PnP 平移病态
+                    # （失败帧 48.5% 旋转对 t 错，深度是唯一无假设的信号）。
+                    if (bool(s_cfg.get("tz_depth", False))
+                            and ex.get("depth_img") is not None):
+                        depth = np.asarray(ex["depth_img"])
+                        x0d, y0d, wd, hd = chosen_ex["crop_box_used"]
+                        if (0 <= x0d and 0 <= y0d
+                                and y0d + hd <= depth.shape[0]
+                                and x0d + wd <= depth.shape[1]):
+                            d_crop = depth[y0d:y0d + hd, x0d:x0d + wd]
+                            vals = d_crop[mask > 0]
+                            vals = vals[np.isfinite(vals) & (vals > 0)]
+                            if len(vals) >= 16:
+                                z_med = float(np.median(vals))
+                                if 0.5 * t_out[2] < z_med < 2.0 * t_out[2]:
+                                    t_cur[2] = z_med
+                    rend = None
+                    for it in range(2):
                         R0t = torch.tensor(R_out, dtype=torch.float32,
                                            device=self.device)
                         t0t = torch.tensor(t_cur, dtype=torch.float32,
@@ -1637,13 +1662,16 @@ class PoseEstimator:
                         rend = (alpha[..., 0].detach().cpu().numpy() > 0.5)
                         a_render = float(rend.sum())
                         if a_render < 16:
+                            rend = None
+                            break
+                        if xy_only:
                             break
                         r = np.sqrt(a_render / a_mask)
                         if not (0.8 <= r <= 1.25):
                             break
                         t_cur[2] *= r
                     # xy 质心对齐：渲染掩码质心 → 查询掩码质心
-                    ry, rx = np.nonzero(rend)
+                    ry, rx = np.nonzero(rend) if rend is not None else ([], [])
                     my, mx = np.nonzero(mask)
                     if len(ry) >= 16 and len(my) >= 16:
                         dcx = (mx.mean() - rx.mean()) / K_crop[0, 0]
@@ -1664,12 +1692,12 @@ class PoseEstimator:
     # ------------------------------------------------------------------
     def estimate(self, img_rgb_u8: np.ndarray, K_query: np.ndarray,
                  gt_bbox=None, gt_mask=None,
-                 return_candidates: bool = False, frame_id=None
-                 ) -> EstimateResult:
+                 return_candidates: bool = False, frame_id=None,
+                 depth_img=None) -> EstimateResult:
         """单帧 6D 位姿估计（阶段 2 extract_matches + 阶段 3 _solve）。"""
         ex = self.extract_matches(img_rgb_u8, K_query,
                                   gt_bbox=gt_bbox, gt_mask=gt_mask,
-                                  frame_id=frame_id)
+                                  frame_id=frame_id, depth_img=depth_img)
         if ex is None:
             return EstimateResult(success=False, timings={})
         return self._solve(ex, K_query, return_candidates=return_candidates,
@@ -1991,6 +2019,11 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
         gt_mask = None
         if fr.mask_path is not None:
             gt_mask = cv2.imread(str(fr.mask_path), cv2.IMREAD_GRAYSCALE) > 0
+        depth_img = None
+        if fr.depth_path is not None:
+            depth_img = cv2.imread(str(fr.depth_path), cv2.IMREAD_UNCHANGED)
+            if depth_img is None:
+                depth_img = None
         if matches_dir is not None:
             # 阶段 3 路径：从落盘的阶段 2 产物直接求解（跳过 MASt3R）。
             # run_linemod 传入的 matches_dir 已含 obj 子目录。
@@ -2003,7 +2036,8 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
             res = estimator.estimate(img, fr.K, gt_bbox=fr.bbox_visib,
                                      gt_mask=gt_mask,
                                      return_candidates=bool(topk_ks),
-                                     frame_id=fr.frame_id)
+                                     frame_id=fr.frame_id,
+                                     depth_img=depth_img)
         if res.success:
             m = evaluate_pose(
                 model_pts, ds.diameter, fr.K, fr.R_gt, fr.t_gt, res.R, res.t,
@@ -2078,6 +2112,9 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
                 "n_inliers": int(res.n_inliers),
                 "m": m, "timings": res.timings,
                 "cand_adds": c_adds, "cand_projs": c_projs,
+                # 候选模板索引（诊断用：GT 最近模板是否进池/被选，08-11）
+                "cand_templates": ([c.get("template_idx") for c in res.candidates]
+                                   if res.candidates else []),
             }
             cache_fh.write(_json.dumps(rec, default=float) + "\n")
             cache_fh.flush()

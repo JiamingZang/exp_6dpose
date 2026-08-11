@@ -52,6 +52,7 @@ class Frame:
     t_gt: np.ndarray              # (3,) mm
     bbox_visib: Optional[np.ndarray] = None   # (4,) x,y,w,h
     mask_path: Optional[Path] = None
+    depth_path: Optional[Path] = None   # BOP 深度图（mm，depth_scale 见 camera.json）
 
 
 class LinemodDataset:
@@ -142,11 +143,13 @@ class LinemodDataset:
                     scene_gt_info[fid_str][gt_idx]["bbox_visib"], dtype=np.float64)
             mask_path = (self.scene_dir / "mask_visib"
                          / f"{fid:06d}_{gt_idx:06d}.png")
+            depth_path = self.scene_dir / "depth" / f"{fid:06d}.png"
             frames.append(Frame(
                 frame_id=fid,
                 rgb_path=self.scene_dir / "rgb" / f"{fid:06d}.png",
                 K=K, R_gt=R, t_gt=t, bbox_visib=bbox,
                 mask_path=mask_path if mask_path.exists() else None,
+                depth_path=depth_path if depth_path.exists() else None,
             ))
         self._frames = frames
         return frames

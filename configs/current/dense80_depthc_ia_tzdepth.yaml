@@ -1,0 +1,13 @@
+# RGB-D 深度平移校正（6d-tz-depth）：掩码内深度中值 z + 渲染质心对齐 xy
+# 与 champion（dense80_depthc_ia）唯一差异 = tz_search: true + tz_depth: true
+# + tz_search_xy_only: true
+# 背景（08-11 gap 分解）：失败帧 48.5% 为"旋转对、平移错"（99.1% 粗位姿
+# R≤10° 但 t 错；tz 仅 35 帧，xy 错 1556 帧）。掩码几何（面积比/质心）判负
+# 后，BOP 深度图是唯一无假设的测量：掩码内深度中值直接替换 z，渲染掩码
+# 质心对齐 xy（IoU 提升才接受）。
+base: dense80_depthc_ia.yaml
+
+solver:
+  tz_search: true
+  tz_search_xy_only: true
+  tz_depth: true
