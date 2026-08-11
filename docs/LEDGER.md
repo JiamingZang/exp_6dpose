@@ -43,7 +43,7 @@
 | dense80_depthc_gtbbox{,_gtmask,_pd}.yaml | done | 6d-det-align 检测框口径拆变量：2a（框+全1+全解码）5 物体均值 -2.84 判负；2c（+DINOv2 预筛）≈基线 → 定位不是瓶颈；2b（GT 掩码）cat/duck +4~6；全解码排序物体异质（duck 受益）|
 | dense80_depthc_ia_topk.yaml | done | 6d-gap-oracle 候选池 oracle 上界（champion + metrics.topk_best [1,3,5,40]）：top40 池内 GT 择优 62.0 ≈ 端到端 61.2 → 候选池生成是总瓶颈；duck/cat 池有货选择倒挂、ape/phone 优化净赚 |
 | dense80_depthc_ia_geocand{,_gtmask}.yaml | done | 6d-mask-geo 掩码几何平移候选判负：duck FastSAM 44.17（-3.33）/ GT 掩码 45.00（-6.67 vs GT 掩码档 51.67）——机制无效非掩码拖累；代码保留（开关默认关）|
-| dense80_depthc_ia_tzdepth.yaml / dense80_depthc_ia_tonly.yaml | running | 6d-tz-depth 平移校正两档：深度档（BOP 中值 z，消融）/ RGB-only 档（refine_stage1_iters 200 + 面积正则，主线可部署）|
+| dense80_depthc_ia_tzdepth.yaml / dense80_depthc_ia_tonly.yaml | done | 6d-tz-depth 平移校正收官：深度档 +4.17（RGB-D 充分条件）；t-only -2.50 / tzxy -1.67（RGB-only 全负）——单目平移病态=信息极限 |
 | dense80_depthc_ia_multi.yaml | done | 6d-ia-multi 多初始假设 iter_align 通过：duck 55.83（+8.33，端到端）；效率 +2%；挑战 3 首正，扩 5 弱物体 |
 | dense80_depthc_ia_track.yaml | done | 6d-track-seed 帧间跟踪种子：duck 50.83（+3.33 vs 基线）但低于 multi 55.83；代价 +40% 不划算；仅论文视频扩展素材 |
 | dense80_depthc_ia_multirefine.yaml | done | 6d-multi-refine 种子级渲染对比优化判负：duck 49.17（-6.66 vs multi）——refiner 盆底择优失效（ADD -6.66 但 Proj +9.16）；渲染对比优化两轮判负结案 |

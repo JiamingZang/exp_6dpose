@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-tz-depth` |
 | Owner | `qoder` |
-| Status | `running` |
+| Status | `done` |
 | Started | `2026-08-11 14:25` |
-| Finished | `<YYYY-MM-DD HH:MM 或 empty>` |
+| Finished | `2026-08-11 22:05` |
 | Queue row | `experiments/QUEUE.md::6d-tz-depth` |
 
 ## Question
@@ -72,7 +72,7 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia_to
 | ADD (tzdepth) | 47.50 | 51.67 | **+4.17** | 深度档（BOP 中值 z + 质心 xy）|
 | ADD (t-only) | 47.50 | 45.00 | -2.50 | RGB-only 档：refiner 阶段 1 加强，判负 |
 | ADD (tzxy) | 47.50 | 45.83 | -1.67 | 质心对齐单独，判负 |
-| ADD (multi) | 47.50 |  |  | 挑战 3 多假设，验证中 |
+| ADD (multi) | 47.50 | 55.83 | +8.33 | 挑战 3 多假设，已结案 |
 
 ## Decision
 
@@ -91,8 +91,8 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia_to
 
 ## Sync Checklist
 
-- [ ] `experiments/QUEUE.md` 状态已更新
-- [ ] `docs/STATE.md` 冠军/在跑/下一步已更新
-- [ ] `docs/LEDGER.md` 已新增或更新一行
-- [ ] 结果文件路径写清楚
-- [ ] `python3 scripts/analysis/check_state.py` 通过
+- [x] `experiments/QUEUE.md` 状态已更新
+- [x] `docs/STATE.md` 冠军/在跑/下一步已更新
+- [x] `docs/LEDGER.md` 已新增或更新一行
+- [x] 结果文件路径写清楚
+- [x] `python3 scripts/analysis/check_state.py` 通过
