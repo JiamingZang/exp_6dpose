@@ -1613,6 +1613,13 @@ class PoseEstimator:
                                                      n_inliers=0,
                                                      template_idx=-1))
                 best_la, best_r = float("inf"), (R_c, t_c)
+                # 种子级渲染对比优化（08-11 multi-refine）：把每个种子的
+                # 优化从"匹配+PNP"升级为可微渲染对齐（GS-Pose GS-Refiner
+                # 同款损失），短步数探各盆底；择优仍在盆底做（refiner
+                # 6DOF 单假设判负教训：从错误盆出发 + 掩码损失面污染）。
+                # 精化变差回退种子位姿，防 refiner 把好种子推坏。
+                seed_rf = int(s_cfg.get(
+                    "iter_align_seed_refine_iters", 0) or 0)
                 for s in seeds:
                     R_s, t_s = np.asarray(s.R), np.asarray(s.t)
                     R_i, t_i = self._iter_align(chosen_ex, K_query,
@@ -1623,6 +1630,19 @@ class PoseEstimator:
                     K_crop = K_query.copy()
                     K_crop[0, 2] -= x0
                     K_crop[1, 2] -= y0
+                    if (seed_rf > 0 and self._refiner is not None):
+                        R_r, t_r = self._refiner.refine(
+                            chosen_ex["crop"], chosen_ex["mask_crop"],
+                            K_crop, R_i, t_i, iterations=seed_rf)
+                        if R_r is not None:
+                            la_pre = self._verifier.align_loss(
+                                chosen_ex["crop"], chosen_ex["mask_crop"],
+                                K_crop, R_i, t_i)
+                            la_post = self._verifier.align_loss(
+                                chosen_ex["crop"], chosen_ex["mask_crop"],
+                                K_crop, R_r, t_r)
+                            if la_post <= la_pre:
+                                R_i, t_i = R_r, t_r
                     la = self._verifier.align_loss(
                         chosen_ex["crop"], chosen_ex["mask_crop"],
                         K_crop, R_i, t_i)

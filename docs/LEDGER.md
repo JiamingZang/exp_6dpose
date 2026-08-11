@@ -45,6 +45,7 @@
 | dense80_depthc_ia_geocand{,_gtmask}.yaml | done | 6d-mask-geo 掩码几何平移候选判负：duck FastSAM 44.17（-3.33）/ GT 掩码 45.00（-6.67 vs GT 掩码档 51.67）——机制无效非掩码拖累；代码保留（开关默认关）|
 | dense80_depthc_ia_tzdepth.yaml / dense80_depthc_ia_tonly.yaml | running | 6d-tz-depth 平移校正两档：深度档（BOP 中值 z，消融）/ RGB-only 档（refine_stage1_iters 200 + 面积正则，主线可部署）|
 | dense80_depthc_ia_multi.yaml | done | 6d-ia-multi 多初始假设 iter_align 通过：duck 55.83（+8.33，端到端）；效率 +2%；挑战 3 首正，扩 5 弱物体 |
+| dense80_depthc_ia_multirefine.yaml | running | 6d-multi-refine 种子级渲染对比优化（multi + iter_align_seed_refine_iters: 120）：每种子 iter_align 后追加 120 步 refiner 探盆 + 精化回退保护 + align_loss 盆底择优；GS-Pose duck 77.2 靶向 |
 | dense80_depthc_mh.yaml / dense80_tzsearch.yaml / dense80_batch16.yaml / dense80_depth03_w1.yaml | archived | 过程变体 |
 | legacy_mypose.yaml | archived | 旧管线复刻对照（README §8 口径警告）|
 | experiments/dense80_gtmask.yaml | current | GT 掩码检索上界分析 |

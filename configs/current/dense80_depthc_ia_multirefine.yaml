@@ -1,0 +1,14 @@
+# 多种子渲染对比优化（6d-multi-refine）：multi 的种子框架 + 每种子短
+# 渲染对齐精化（GS-Pose GS-Refiner 同款可微渲染损失）——在盆底择优。
+# 与 champion 唯一差异 = solver.iter_align_multi_hypo: 5 +
+# solver.iter_align_seed_refine_iters: 120
+# 背景（08-11 GS-Pose duck 对比 77.2 vs 55.83）：GS-Refiner 从 init
+# 38.8 拉到 77.2（+38.4），我们优化链只 +8.33——refiner 单假设判负过
+# （从错误盆出发 + 掩码损失面污染）；multi 已证"正确盆入口"有用（+8.33），
+# 下一步把每个种子的优化从"匹配+PNP"升级为"渲染对比优化"，择优仍在
+# 盆底做（损失面污染问题由 refiner 交集掩码 L1 已有修复承接）。
+base: dense80_depthc_ia_multi.yaml
+
+solver:
+  iter_align_multi_hypo: 5
+  iter_align_seed_refine_iters: 120
