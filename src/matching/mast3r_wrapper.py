@@ -203,7 +203,7 @@ class Mast3rMatcher:
         self._tmpl_feats, self._tmpl_pos = feats, poss
         self._tmpl_shapes, self._tmpl_fg = shapes, fgs
         # 像素换算系数：编码系 → 原生系（512 档 = 1.0，行为不变）
-        self._tmpl_scale = 1.0 / tscale if tscale != 1.0 else 1.0
+        self._tmpl_scale = tscale
 
     # ------------------------------------------------------------------
     def _decode_batch(self, fq, pq, sq, idxs):
