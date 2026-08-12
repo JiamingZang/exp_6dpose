@@ -53,6 +53,8 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia_76
 - `08-12 12:12`：修复版复跑启动（新 cache-dir exp_match768b，cfg_hash 不含代码）。
 - `08-12 12:50`：复跑崩 IndexError（pix_t 637 > 512）——换算方向 bug：
   `1/tscale` 放大 1.5 倍而非缩小 0.667 倍，改为 `tscale` 本身；测试过重启。
+- `08-12 12:52`：二跑 OOM（27GB + 需 4.5GB）——模板同步 768 后成对
+  cross-attn ~5×，batch 4 超限；改 batch_size: 2 重启。
 
 ## Result
 

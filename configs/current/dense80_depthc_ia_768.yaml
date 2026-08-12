@@ -5,3 +5,4 @@ base: dense80_depthc_ia.yaml
 
 matching:
   image_size: 768
+  batch_size: 2   # 模板同步 768 后成对 cross-attn ~5×，batch 4 OOM（27GB）
