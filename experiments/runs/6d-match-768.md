@@ -45,12 +45,19 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia_76
 - `08-12 12:05`：内存冒烟通过——768 encode 峰值 3.2GB、成对 decode batch4
   峰值 6.6GB（1024 OOM 24.8GB 的历史判死不适用于 768）。
 - `08-12 12:02`：登记入队（running），启动 duck 120 帧。
+- `08-12 12:10`：**首轮出炉 duck 35.00（-12.50 大判负）**——根因定位：
+  查询 resize 768 而模板编码仍原生 512，MASt3R patch 固定 16px → 两侧
+  patch 物理尺度不一致 → 互最近邻 desc 语义错位。修复（eeb277e）：
+  prepare_templates 模板/alpha 同步 resize 到 long_side + pix_t 换算回
+  原生系（coord_map 查表不变）；512 档 scale=1.0 行为不变，202 测试过。
+- `08-12 12:12`：修复版复跑启动（新 cache-dir exp_match768b，cfg_hash 不含代码）。
 
 ## Result
 
 | 指标 | baseline | this run | delta | note |
 |---|---:|---:|---:|---|
-| ADD | 47.50 |  |  | ia 基线 120 帧 |
+| ADD（首轮，模板未同步）| 47.50 | 35.00 | -12.50 | 查询 768 vs 模板 512 patch 尺度不一致 |
+| ADD（修复版）| 47.50 |  |  | 模板同步 768 复跑中 |
 | Proj |  |  |  |  |
 | 5cm5° |  |  |  |  |
 
