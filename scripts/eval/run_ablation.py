@@ -33,7 +33,8 @@ from src.pipeline import onboard_object, template_bank_path
 from run_linemod import print_table, run_eval  # noqa: E402（同目录导入）
 
 
-def run_one_ablation(ablation_path, base_cfg, objects, device, max_frames):
+def run_one_ablation(ablation_path, base_cfg, objects, device, max_frames,
+                     cache_dir=None):
     name, runs = load_ablation(base_cfg, ablation_path)
     all_results = {}
     for label, cfg, reonboard in runs:
@@ -48,7 +49,8 @@ def run_one_ablation(ablation_path, base_cfg, objects, device, max_frames):
                 print(f"[onboard] {label} / {obj} ...")
                 onboard_object(cfg, obj, device=device)
         try:
-            results = run_eval(cfg, objects, device, max_frames=max_frames)
+            results = run_eval(cfg, objects, device, max_frames=max_frames,
+                               cache_dir=cache_dir)
         except NotImplementedError as e:
             # loftr 等 TODO 接口：记录跳过原因，不中断整组消融
             print(f"[skip] {label}: {e}")
@@ -68,6 +70,8 @@ def main():
     ap.add_argument("--objects", nargs="*", default=None)
     ap.add_argument("--device", default=None)
     ap.add_argument("--max-frames", type=int, default=0)
+    ap.add_argument("--cache-dir", default=None,
+                    help="帧级缓存目录（断点续跑；默认关闭）")
     args = ap.parse_args()
 
     base_cfg = load_config(args.config)
@@ -85,7 +89,7 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     for p in paths:
         name, results = run_one_ablation(p, base_cfg, objects, device,
-                                         args.max_frames)
+                                         args.max_frames, args.cache_dir)
         out = out_dir / f"ablation_{name}.json"
         out.write_text(json.dumps(results, indent=2, ensure_ascii=False))
         print(f"\n[{name}] 结果已写入 {out}")
