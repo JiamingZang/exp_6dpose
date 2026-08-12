@@ -411,7 +411,7 @@ class Mast3rMatcher:
                 conf_t_all = np.concatenate(
                     [desc_cache[i][6] for i in sel], axis=0)
                 ok = ok & (conf_q_all[idx_q] > conf_tau) \
-                    & (conf_t_all[it] > conf_tau)
+                    & (conf_t_all[nn_q2t] > conf_tau)
             iq, it = idx_q[ok], nn_q2t[ok]
             ss = sims_fwd[ok]
             for j, i in enumerate(sel):
@@ -487,7 +487,7 @@ class Mast3rMatcher:
             conf_tau = float(self.cfg.get("conf_tau", 0.0))
             if conf_tau > 0:
                 # desc 置信度过滤（探针：好/坏对应 conf 差 +0.18~0.38，10/10 帧分离）
-                ok = ok & (conf_q[idx_q] > conf_tau) & (conf_t[it] > conf_tau)
+                ok = ok & (conf_q[idx_q] > conf_tau) & (conf_t[nn_q2t] > conf_tau)
             iq = idx_q[ok]
             it = nn_q2t[ok]
             if p3_q is not None:

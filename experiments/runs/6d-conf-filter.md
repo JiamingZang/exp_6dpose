@@ -46,6 +46,8 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia_co
   差 +0.18~+0.38）——conf 是可靠对应质量信号。
 - `08-12 14:40`：登记入队（running），conf_tau 1.5 实现完成（融合/非融合
   两分支 + 7 元组 desc_cache），202 测试过。
+- `08-12 15:05`：首跑崩 UnboundLocalError `it`（conf 过滤在 it 定义前引用）——
+  改用 nn_q2t，修复重启。
 
 ## Result
 
