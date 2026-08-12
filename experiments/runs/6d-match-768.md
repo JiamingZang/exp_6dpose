@@ -55,6 +55,8 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia_76
   `1/tscale` 放大 1.5 倍而非缩小 0.667 倍，改为 `tscale` 本身；测试过重启。
 - `08-12 12:52`：二跑 OOM（27GB + 需 4.5GB）——模板同步 768 后成对
   cross-attn ~5×，batch 4 超限；改 batch_size: 2 重启。
+- `08-12 13:10`：三跑崩 IndexError 512——_decode_top_desc（引导精化路径）
+  自建 pix_t（_tmpl_fg 768 系）漏换算，补乘 _tmpl_scale；重启。
 
 ## Result
 

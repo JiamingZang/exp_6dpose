@@ -1115,7 +1115,8 @@ class PoseEstimator:
             return {"template_idx": idx,
                     "desc_q": dq.float().cpu().numpy().astype(np.float16),
                     "desc_t": dt_fg.half().cpu().numpy(),
-                    "pix_t": np.stack([txs, tys], axis=1),
+                    "pix_t": (np.stack([txs, tys], axis=1)
+                              * self.matcher._tmpl_scale),
                     "sxy": (sx, sy)}
         return None
 
