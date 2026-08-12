@@ -6,9 +6,9 @@
 |---|---|
 | ID | `6d-match-768` |
 | Owner | `qoder` |
-| Status | `running` |
+| Status | `done` |
 | Started | `2026-08-12 12:02` |
-| Finished |  |
+| Finished | `2026-08-12 14:05` |
 | Queue row | `experiments/QUEUE.md::6d-match-768` |
 
 ## Question
@@ -24,7 +24,7 @@
 
 | 项 | 值 |
 |---|---|
-| Config | `configs/current/dense80_depthc_ia_768.yaml`（champion + matching.image_size: 768）|
+| Config | `configs/current/dense80_depthc_ia_768.yaml` （champion + matching.image_size: 768 + batch_size 2）|
 | Code change | 无（纯配置，`image_size` 已有配置项）|
 | Data split | duck 120 帧子集先验证（最弱物体，ia 基线 47.50）|
 | Metrics | ADD(S)@0.1d / Proj@5px / 5cm5° |
@@ -57,21 +57,34 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia_76
   cross-attn ~5×，batch 4 超限；改 batch_size: 2 重启。
 - `08-12 13:10`：三跑崩 IndexError 512——_decode_top_desc（引导精化路径）
   自建 pix_t（_tmpl_fg 768 系）漏换算，补乘 _tmpl_scale；重启。
+- `08-12 14:05`：**四跑出炉 duck 29.17（-18.33）**——模板同步 + 三处 pix_t
+  换算全修后仍大负；Proj 68.33（比首轮 +5）证明 patch 尺度同步有效但
+  ADD 更差——768 查询是 512 裁剪插值放大，无新信息且放大伪影污染对应。
 
 ## Result
 
 | 指标 | baseline | this run | delta | note |
 |---|---:|---:|---:|---|
 | ADD（首轮，模板未同步）| 47.50 | 35.00 | -12.50 | 查询 768 vs 模板 512 patch 尺度不一致 |
-| ADD（修复版）| 47.50 |  |  | 模板同步 768 复跑中 |
-| Proj |  |  |  |  |
-| 5cm5° |  |  |  |  |
+| ADD（四跑，全修复）| 47.50 | 29.17 | -18.33 | 模板同步 + pix_t 换算全修，仍大负 |
+| Proj（四跑）|  | 68.33 |  | patch 同步有效（首轮 63.33）但 ADD 更差 |
+| 5cm5°（四跑）|  | 45.00 |  | 与基线持平 |
 
 ## Decision
 
-- 结论：`pending`
+- 结论：`done`（**分辨率侧结案：768 判负，非对应质量杠杆**）
 - 原因：
-- 下一步：
+  1. 两版独立大负（模板不同步 -12.50 / 全修复 -18.33）：查询裁剪 512 是
+     信息上限，768 只是插值放大——MASt3R patch 更细但内容模糊，desc
+     受插值伪影污染，对应精度不升反降；
+  2. 模板同步确实有效（Proj 63.33→68.33，patch 尺度一致修复成立），
+     但改变不了裁剪信息上限；
+  3. 与 superres（判负）、1024（OOM）闭合：**分辨率不是候选池生成
+     瓶颈的杠杆**——瓶颈在 MASt3R 模型对应能力本身（弱纹理 patch 匹配
+     极限），单目 RGB 侧收口。
+- 下一步：检索拆解诊断（池空物体 GT 最近模板是否在 DINOv2 池内）定
+  最终叙事；6d-ablation-full 论文消融。
+- 产物：`outputs/exp_match768d/results/duck.json`（修复版全量结果）
 
 ## Sync Checklist
 
