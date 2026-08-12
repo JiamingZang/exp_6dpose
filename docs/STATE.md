@@ -36,7 +36,7 @@
 | 6d-multi-refine（已结案 08-11，判负）| 种子级渲染对比优化 duck 49.17（-6.66 vs multi）：refiner 盆底择优失效（ADD -6.66 但 Proj +9.16，渲染自洽非几何正确）——6d-refiner-v2 机制在多种子框架复现；渲染对比优化方向两轮判负结案，差距回填候选池生成 |
 | 6d-prescreen-mmr（已结案 08-11，判负）| MMR 预筛多样性 duck 46.67（-0.83）：预筛阶段两度尝试（扩 K、多样性重排）均无收益——瓶颈在 MASt3R 对应质量本身 |
 | 6d-fallback-decode（已结案 08-11，判负）| 失败帧自适应全解码 duck 46.67（-0.83）：触发帧与全解码收益帧不重合，失败帧付 20.8s 无收益；解码侧结案 |
-| 6d-pnp-multisol（todo）| 挑战 2：EPro-PnP 式 RANSAC 多 t 解 + 渲染择优（弱纹理 PnP 多解性）|
+| 6d-pnp-multisol（已结案 08-12，**判死**）| 挑战 2 前提诊断：duck 60 帧 × 30 次 RANSAC 全部单解（硬对应 + EPnP 闭式解无多解性）；inlier 择优 60/60 命中解集最优——瓶颈确证在候选池生成，与 gap-oracle 闭环；EPro-PnP 多解来自训练侧 soft correspondence |
 | 6d-vggt-recon（Omega）| VGGT-1B sanity 判死（R_err 94°）；Omega 权重 gated 待 HF 授权，授权后同脚本复跑 |
 | 帧间追踪 | 上帧位姿初始化跳过定位+匹配，7.1s → <1s（速度章，P5 排期后）|
 
