@@ -1,0 +1,7 @@
+# DINOv2 patch token 稠密匹配器消融（6d-ablation-full 03_matcher 组）
+# 动机：匹配模型消融——MASt3R desc（默认）vs DINOv2 patch token 稠密匹配
+# 口径：粗位姿链路（guided），patch 14px 双线性上采样到像素级描述子
+base: dense80_depthc_guided.yaml
+
+matching:
+  matcher: dinov2_patch
