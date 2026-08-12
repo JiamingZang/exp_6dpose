@@ -1104,7 +1104,7 @@ class PoseEstimator:
         q_img, (sx, sy) = _resize_to_multiple16(
             ex["crop"], int(self.cfg["matching"].get("image_size", 512)))
         fq, pq, sq = self.matcher._encode(q_img)
-        for i, dq, dt, _, _ in self.matcher._decode_batch(fq, pq, sq, [idx]):
+        for i, dq, dt, _, _, _, _ in self.matcher._decode_batch(fq, pq, sq, [idx]):
             fg = self.matcher._tmpl_fg[idx]
             tys, txs = np.nonzero(fg)
             if len(tys) == 0:

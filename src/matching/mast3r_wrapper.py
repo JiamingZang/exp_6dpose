@@ -220,9 +220,11 @@ class Mast3rMatcher:
 
         Yields:
             (template_idx, desc_q (H,W,24), desc_t (S,S,24),
-             pts3d_q (H,W,3), pts3d_t (S,S,3))；desc 由 reg_desc 归一到
+             pts3d_q (H,W,3), pts3d_t (S,S,3),
+             conf_q (H,W,1), conf_t (S,S,1))；desc 由 reg_desc 归一到
             单位范数（mast3r/catmlp_dpt_head.py:19-24,36），点积即余弦
-            相似度；pts3d 为各自相机系（几何一致性过滤用）
+            相似度；pts3d 为各自相机系（几何一致性过滤用）；conf 为
+            desc 置信度 exp 输出（>1.5 官方惯例视为可信，对应过滤用）
         """
         torch = self.torch
         b = len(idxs)
@@ -241,7 +243,8 @@ class Mast3rMatcher:
                     2, [tok.float() for tok in dec2], st)
         for bi, i in enumerate(idxs):
             yield (i, res1["desc"][bi], res2["desc"][bi],
-                   res1["pts3d"][bi], res2["pts3d"][bi])
+                   res1["pts3d"][bi], res2["pts3d"][bi],
+                   res1["desc_conf"][bi], res2["desc_conf"][bi])
 
     # ------------------------------------------------------------------
     def match(self, query_crop_u8: np.ndarray, query_mask_crop: np.ndarray,
@@ -305,8 +308,8 @@ class Mast3rMatcher:
         top_full = None      # (template_idx, desc_q_full, desc_t_fg, pix_t)
         for start in range(0, len(decode_idxs), self.batch_size):
             idxs = decode_idxs[start:start + self.batch_size]
-            for i, desc_q, desc_t, pts3d_q, pts3d_t in self._decode_batch(
-                    fq, pq, sq, idxs):
+            for i, desc_q, desc_t, pts3d_q, pts3d_t, conf_q, conf_t in \
+                    self._decode_batch(fq, pq, sq, idxs):
                 dq = desc_q.reshape(-1, desc_q.shape[-1])
                 fg_t = self._tmpl_fg[i]
                 tys, txs = np.nonzero(fg_t)
@@ -324,7 +327,9 @@ class Mast3rMatcher:
                 pix_t_native = np.stack([txs, tys], axis=1) * self._tmpl_scale
                 desc_cache[i] = (
                     dq[flat_q_full].half().cpu(), dt.half().cpu(),
-                    pix_t_native, p3_q, p3_t)
+                    pix_t_native, p3_q, p3_t,
+                    conf_q.reshape(-1)[flat_q_full].float().cpu().numpy(),
+                    conf_t.reshape(-1)[flat_t].float().cpu().numpy())
                 if prefilter_order is not None:
                     is_top = (i == int(decode_idxs[0]))
                 else:
@@ -400,6 +405,13 @@ class Mast3rMatcher:
                 pix_q_all.astype(np.float64), idx_q, nn_q2t, nn_t2q,
                 tau_px=cycle_tau_px)
             ok = keep & (sims_fwd > sim_threshold)
+            conf_tau = float(self.cfg.get("conf_tau", 0.0))
+            if conf_tau > 0:
+                conf_q_all = desc_cache[sel[0]][5]
+                conf_t_all = np.concatenate(
+                    [desc_cache[i][6] for i in sel], axis=0)
+                ok = ok & (conf_q_all[idx_q] > conf_tau) \
+                    & (conf_t_all[it] > conf_tau)
             iq, it = idx_q[ok], nn_q2t[ok]
             ss = sims_fwd[ok]
             for j, i in enumerate(sel):
@@ -428,7 +440,7 @@ class Mast3rMatcher:
             i = int(i)
             if not np.isfinite(scores[i]) or i not in desc_cache:
                 continue
-            dq_fg, dt_fg, pix_t, p3_q, p3_t = desc_cache[i]
+            dq_fg, dt_fg, pix_t, p3_q, p3_t, conf_q, conf_t = desc_cache[i]
             dq_fg = dq_fg.to(self.device).float()
             dt_fg = dt_fg.to(self.device).float()
             # 稠密互最近邻：相似度矩阵按查询侧分块算，避免一次性建
@@ -472,6 +484,10 @@ class Mast3rMatcher:
                     p3_q, p3_t, nn_q2t, sims_fwd, rng,
                     tau_obj_frac=geom_tau, ransac_iters=geom_iters)
             ok = keep & (sims_fwd > sim_threshold)     # 相似度阈值过滤
+            conf_tau = float(self.cfg.get("conf_tau", 0.0))
+            if conf_tau > 0:
+                # desc 置信度过滤（探针：好/坏对应 conf 差 +0.18~0.38，10/10 帧分离）
+                ok = ok & (conf_q[idx_q] > conf_tau) & (conf_t[it] > conf_tau)
             iq = idx_q[ok]
             it = nn_q2t[ok]
             if p3_q is not None:
