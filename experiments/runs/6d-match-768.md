@@ -60,6 +60,11 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia_76
 - `08-12 14:05`：**四跑出炉 duck 29.17（-18.33）**——模板同步 + 三处 pix_t
   换算全修后仍大负；Proj 68.33（比首轮 +5）证明 patch 尺度同步有效但
   ADD 更差——768 查询是 512 裁剪插值放大，无新信息且放大伪影污染对应。
+- `08-12 14:20`：**检索拆解诊断（/tmp/retrieval_split_diag.py，GT 掩码裁剪
+  → DINOv2 CLS → top-40）**：GT 最近视角模板池内命中率——成功帧
+  97.2-100%，失败帧 96.7-100%（ape 59/61、cat 37/37、duck 49/49、
+  holepuncher 66/67、phone 39/40）——**正确模板几乎总在池内，失败发生在
+  MASt3R 稠密对应本身**（模型能力极限）。
 
 ## Result
 
@@ -80,10 +85,13 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia_76
   2. 模板同步确实有效（Proj 63.33→68.33，patch 尺度一致修复成立），
      但改变不了裁剪信息上限；
   3. 与 superres（判负）、1024（OOM）闭合：**分辨率不是候选池生成
-     瓶颈的杠杆**——瓶颈在 MASt3R 模型对应能力本身（弱纹理 patch 匹配
-     极限），单目 RGB 侧收口。
-- 下一步：检索拆解诊断（池空物体 GT 最近模板是否在 DINOv2 池内）定
-  最终叙事；6d-ablation-full 论文消融。
+     瓶颈的杠杆**；
+  4. **检索拆解闭环（14:20）**：GT 掩码裁剪下 DINOv2 top-40 池内命中
+     失败帧 96.7-100%——正确模板在池内，瓶颈精确锁定为 **MASt3R 稠密
+     对应质量（弱纹理 patch 匹配模型极限）**，非检索/视角覆盖/分辨率。
+- 下一步：单目 RGB 侧旋钮（预筛/解码/择优/多假设/分辨率/检索）全部结案，
+  差距归因基础模型能力；剩余可挖：RGB-D 深度约束（已证 +4.17）、更强
+  匹配模型；6d-ablation-full 论文消融。
 - 产物：`outputs/exp_match768d/results/duck.json`（修复版全量结果）
 
 ## Sync Checklist
