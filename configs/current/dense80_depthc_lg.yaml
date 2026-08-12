@@ -1,0 +1,8 @@
+# LightGlue 匹配器对比（6d-lightglue）：SuperPoint + LightGlue 稀疏匹配
+# 动机：瓶颈 = MASt3R 稠密对应质量（检索拆解闭环）；LightGlue 是
+# Transformer 稀疏匹配（攻对应质量的另一路线），零训练开箱即用
+# 口径：粗位姿链路（guided），iter_align 仅 MASt3R 有（LightGlue 自动跳过）
+base: dense80_depthc_guided.yaml
+
+matching:
+  matcher: lightglue

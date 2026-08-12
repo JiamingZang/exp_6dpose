@@ -561,6 +561,9 @@ class PoseEstimator:
         elif matcher_name == "loftr":
             from .matching.alt_matchers import LoFTRMatcher
             self.matcher = LoFTRMatcher(cfg["matching"], device=device)
+        elif matcher_name == "lightglue":
+            from .matching.alt_matchers import LightGlueMatcher
+            self.matcher = LightGlueMatcher(cfg["matching"], device=device)
         else:
             raise ValueError(f"未知匹配器: {matcher_name}")
         # 模板特征预提取缓存（编码器 token 只算一次，供全部帧复用）
@@ -1098,6 +1101,8 @@ class PoseEstimator:
         """重解码 top1 模板的稠密 desc（引导式精化用，落盘路径按需调用）。"""
         if not ex.get("matches"):
             return None
+        if not hasattr(self.matcher, "_decode_batch"):
+            return None   # LightGlue 等稀疏匹配器无稠密解码
         m = ex["matches"][0]
         idx = int(m.template_idx)
         from .matching.mast3r_wrapper import _resize_to_multiple16
@@ -1137,6 +1142,8 @@ class PoseEstimator:
         iters = int(s_cfg.get("iter_align_iters", 0) or 0)
         if iters <= 0 or self._refiner is None:
             return R, t, -1
+        if not hasattr(self.matcher, "model"):
+            return R, t, -1   # LightGlue 等稀疏匹配器无成对解码器
         import cv2
         from .matching.mast3r_wrapper import _resize_to_multiple16
         from .matching.correspondence import mutual_nn_matches

@@ -169,3 +169,126 @@ class LoFTRMatcher:
         raise NotImplementedError(
             "LoFTR 匹配器尚未接入（匹配器消融预留接口）。"
             "实现说明见 LoFTRMatcher docstring；主实验请用 matcher=mast3r。")
+
+
+
+class LightGlueMatcher:
+    """SuperPoint + LightGlue 稀疏匹配器（对比基线，攻对应质量瓶颈）。
+
+    与 Mast3rMatcher.match 同接口，pipeline 无感切换（matching.matcher:
+    lightglue）。差异：稀疏关键点匹配（无成对 3D 输出 → pts3d_q=None，
+    深度一致性自动关闭）；模板关键点+desc 预缓存。
+
+    权重：weights/superpoint_v1.pth + weights/superpoint_lightglue.pth。
+    """
+
+    def __init__(self, cfg_matching: Dict, device: str = "cuda",
+                 n_score_pixels: int = 2048):
+        import sys as _sys
+        from pathlib import Path
+        _lg = Path(__file__).resolve().parents[2] / "third_party" / "lightglue"
+        if str(_lg) not in _sys.path:
+            _sys.path.insert(0, str(_lg))
+        import torch
+        from lightglue import LightGlue, SuperPoint
+        self.torch = torch
+        self.device = device
+        self.cfg = cfg_matching
+        self.long_side = int(cfg_matching.get("image_size", 512))
+        self.n_score_pixels = n_score_pixels
+        wdir = Path(__file__).resolve().parents[2] / "weights"
+        self.extractor = SuperPoint(max_num_keypoints=int(
+            cfg_matching.get("lg_max_kps", 2048))).eval().to(device)
+        self.extractor.load_state_dict(
+            torch.load(wdir / "superpoint_v1.pth", map_location="cpu"))
+        self.lg = LightGlue(features="superpoint").eval().to(device)
+        self.lg.load_state_dict(
+            torch.load(wdir / "superpoint_lightglue.pth", map_location="cpu"))
+        self.conf_tau = float(cfg_matching.get("lg_conf_tau", 0.5))
+        self._tmpl_kps = None      # list[(N,2) 像素]
+        self._tmpl_desc = None     # list[(N,256)]
+        self._tmpl_shape = None    # list[(H,W)]
+
+    # ------------------------------------------------------------------
+    def _prep(self, img_u8: np.ndarray):
+        import cv2
+        g = cv2.cvtColor(img_u8, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
+        return self.torch.from_numpy(g)[None, None].to(self.device)
+
+    def _extract(self, img_u8: np.ndarray):
+        with self.torch.no_grad():
+            feats = self.extractor.extract(self._prep(img_u8))
+        return (feats["keypoints"][0].cpu().numpy(),
+                feats["descriptors"][0].cpu().numpy())
+
+    def _lg_input(self, kps: np.ndarray, desc: np.ndarray, hw):
+        torch = self.torch
+        return {
+            "keypoints": torch.from_numpy(kps)[None].to(self.device),
+            "descriptors": torch.from_numpy(desc)[None].to(self.device),
+            "image_size": torch.tensor([[hw[0], hw[1]]],
+                                       device=self.device),
+        }
+
+    def prepare_templates(self, images: np.ndarray, alphas: np.ndarray,
+                          fg_thresh: float = 0.5):
+        kps, descs, shapes = [], [], []
+        for im in images:
+            k, d = self._extract(im)
+            kps.append(k)
+            descs.append(d)
+            shapes.append((im.shape[0], im.shape[1]))
+        self._tmpl_kps, self._tmpl_desc = kps, descs
+        self._tmpl_shape = shapes
+
+    # ------------------------------------------------------------------
+    def match(self, query_crop_u8: np.ndarray, query_mask_crop: np.ndarray,
+              top_k: int, sim_threshold: float, cycle_tau_px: float,
+              n_sample: int, rng: Optional[np.random.Generator] = None,
+              prefilter_order: Optional[np.ndarray] = None
+              ) -> Tuple[List[TemplateMatch], Tuple[float, float],
+                         np.ndarray, None]:
+        if rng is None:
+            rng = np.random.default_rng(0)
+        q_img, (sx, sy) = _resize_to_multiple16(query_crop_u8, self.long_side)
+        kq, dq = self._extract(q_img)
+        n_tmpl = len(self._tmpl_kps)
+        scores = np.full(n_tmpl, -np.inf)
+        decode_idxs = decode_template_indices(
+            n_tmpl, top_k, prefilter_order,
+            decode_k=int(self.cfg.get("top_k_prescreen", top_k)))
+        matches = []
+        for i in decode_idxs:
+            i = int(i)
+            kt, dt = self._tmpl_kps[i], self._tmpl_desc[i]
+            if len(kt) == 0 or len(kq) == 0:
+                continue
+            with self.torch.no_grad():
+                out = self.lg({
+                    "image0": self._lg_input(kq, dq,
+                                             (q_img.shape[0], q_img.shape[1])),
+                    "image1": self._lg_input(kt, dt, self._tmpl_shape[i]),
+                })
+            m = out["matches0"].cpu().numpy()
+            conf = out["matching_scores0"].cpu().numpy()
+            ok = conf > self.conf_tau
+            if ok.sum() == 0:
+                continue
+            m = m[ok]
+            conf = conf[ok]
+            px_q = kq[m[:, 0]]
+            px_t = kt[m[:, 1]]
+            scores[i] = float(conf.mean())
+            p2, p3, ss = sample_correspondences(
+                px_q.astype(np.float64), px_t.astype(np.float64), conf,
+                n_sample=n_sample, rng=rng)
+            matches.append(TemplateMatch(
+                template_idx=i, score=float(scores[i]),
+                pix_q=p2, pix_t=p3, sims=ss, pts3d_q=None))
+        matches.sort(key=lambda x: x.score, reverse=True)
+        return matches, (sx, sy), scores, None
+
+    # ------------------------------------------------------------------
+    # pipeline 兼容桩：LightGlue 无稠密解码（_decode_top_desc 走不到）
+    def _encode(self, img_u8: np.ndarray):
+        raise AttributeError("LightGlueMatcher 无 _encode（无稠密解码）")
