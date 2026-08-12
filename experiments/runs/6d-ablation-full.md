@@ -66,20 +66,49 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
 - `08-12 16:10`：登记入队（running），子集口径（用户确认）。模板库覆盖检查：
   40t/80t 全 13 物体已有；8t/24t 缺（02 组需 onboard cube8 采样）；05 组
   VGGT 未装跳过（run_ablation 不 catch ImportError，会崩）。
+- `08-13 00:30`：01 组首跑（default.yaml base）暴露配置错误：**default.yaml 是
+  40t 模板库（cube8×5）+ guided_refine:false，与主表配置（80t fibonacci +
+  guided）口径不一致**，数字不可比主表；且 ape 40t 库缺 .pt（refine 需要）
+  直接崩。修正：消融 base 一律用 `dense80_depthc_guided.yaml`。
+- `08-13 01:00`：**缓存复用地图**（guided base）：K=1/5/10 档命中 8/12
+  b2g0avtuk 遗留缓存（5 物体 121 帧全）；K=20 档 ape/duck/cat(119) 命中、
+  holepuncher/phone 需补跑（b2g0avtuk 被 kill 时未跑）；K=40 档命中主表
+  cache13_dc2（49138670）。09 组 5.0 档修正为 float（int 5 vs float 5.0
+  hash 漂移 → 不命中主表，改为 5.0 后命中）。
+- `08-13 01:05`：onboard 补齐脚本（/tmp/ablation_onboard_fill.py）入批处理：
+  8t×4 + 24t×5 + 40t ape 补 pt 共 11 次（ape 40t npz 已备份 .40tprebak）；
+  批处理链：01 → onboard fill → 02 → 09 → 07 → 08 → 03(dinov2patch) →
+  tzdepth5（第四章 RGB-D 证据）。
 
 ## Result
 
+**01 topk 组已出（5 弱物体 × 120 帧均值，guided 粗位姿口径；K=1/5/10/20 来自
+8/12 b2g0avtuk 遗留缓存，K=40 今天重跑）：**
+
+| K | ADD(S)@0.1d | Proj@5px | 5cm5° |
+|---|---:|---:|---:|
+| 1 | 30.50 | 53.33 | 32.83 |
+| 5 | 40.00 | 72.83 | 47.33 |
+| 10 | 42.50 | 75.83 | 49.00 |
+| 20 | 43.50 | 76.50 | 52.83 |
+| 40 | 49.17 | 82.00 | 57.50 |
+
+注意：duck 逐物体 K=20（20.0）< K=10（28.33）非单调——8/12 旧缓存存疑，
+已排 duck 全档重跑验证（/tmp/duck_kcurve_verify.sh，v3 批处理后执行）。
+其余物体 K=20≤K=40 单调性成立。K=1 档 8/12 缓存（default base 误跑 40t 库
+faba5ca0）作废；765467ef（guided base）有效。
+
 | 组 | baseline | this run | delta | note |
 |---|---|---:|---:|---|
-| 01 topk |  |  |  |  |
-| 03 matcher |  |  |  |  |
-| 04 localization |  |  |  |  |
-| 06 scale_align |  |  |  |  |
-| 07 selection |  |  |  |  |
-| 09 ransac_eps |  |  |  |  |
-| 10 segmenter |  |  |  |  |
-| 02 n_templates |  |  |  |  |
-| 08 renderer |  |  |  |  |
+| 01 topk | K=40: 49.17 | K=1: 30.50 / K=5: 40.00 / K=10: 42.50 / K=20: 43.50 | K↑ 单调增益（duck 待验证）| K=40=主表口径；K 曲线入论文 5.4 |
+| 03 matcher |  |  |  | dinov2_patch 档排队（v3 批处理）|
+| 04 localization |  |  |  | 已有 6d-det-align 数字，跳过 |
+| 06 scale_align |  |  |  | 默认档命中主表；false 档未排（价值低）|
+| 07 selection |  |  |  | inlier 命中主表；similarity/weighted 排队 |
+| 09 ransac_eps |  |  |  | 5.0 档命中主表；3/8/10 排队 |
+| 10 segmenter |  |  |  | 已有 6d-loc-upper 数字，跳过 |
+| 02 n_templates |  |  |  | 8t 库 onboard 完成（02 组内部）；24t/40t 排队 |
+| 08 renderer |  |  |  | pyrender_cad 需 OSMesa（已配）；排队 |
 | 05 geometry |  |  |  | 跳过（VGGT 未装）|
 
 ## Decision

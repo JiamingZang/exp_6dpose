@@ -5,4 +5,4 @@
 ablation:
   name: ransac_eps
   sweep_field: solver.ransac_reproj_px
-  sweep_values: [3, 5, 8, 10]
+  sweep_values: [3, 5.0, 8, 10]
