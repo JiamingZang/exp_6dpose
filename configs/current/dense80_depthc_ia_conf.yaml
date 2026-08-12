@@ -1,7 +1,9 @@
 # desc 置信度过滤（6d-conf-filter）：MASt3R desc_conf（two_confs 头）从未被使用
 # 探针（/tmp/conf_probe.py，10 帧 duck）：好/坏对应 conf 均值差 +0.18~0.38，10/10 帧分离
-# conf = exp(logit)，官方惯例 >1.5 视为可信
+# conf = exp(logit)。v1（双侧 1.5）灾难 4.17%：模板合成图 conf 系统性低（p95≈0.6）
+# → 拆双侧：查询侧 1.3（≈p25），模板侧关闭
 base: dense80_depthc_ia.yaml
 
 matching:
-  conf_tau: 1.5
+  conf_tau_q: 1.3
+  conf_tau_t: 0.0

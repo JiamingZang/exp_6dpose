@@ -48,12 +48,17 @@ python scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia_co
   两分支 + 7 元组 desc_cache），202 测试过。
 - `08-12 15:05`：首跑崩 UnboundLocalError `it`（conf 过滤在 it 定义前引用）——
   改用 nn_q2t，修复重启。
+- `08-12 15:20`：**v1（双侧 1.5）灾难 4.17%（-43.33）**——诊断：conf_q
+  p50=1.50（1.5 滤掉一半查询像素）；conf_t 模板侧 0.03-0.59（合成渲染图
+  conf 系统性低，p95≈0.6）——模板侧被全滤 → 对应全灭。拆双侧阈值：
+  conf_tau_q 1.3（≈p25）/ conf_tau_t 0（关闭模板侧），重启。
 
 ## Result
 
 | 指标 | baseline | this run | delta | note |
 |---|---:|---:|---:|---|
-| ADD | 47.50 |  |  | ia 基线 120 帧 |
+| ADD（v1 双侧 1.5）| 47.50 | 4.17 | -43.33 | 模板侧 conf 系统性低被全滤，对应全灭 |
+| ADD（v2 查询侧 1.3）| 47.50 |  |  | 跑中 |
 | Proj |  |  |  |  |
 | 5cm5° |  |  |  |  |
 

@@ -405,13 +405,18 @@ class Mast3rMatcher:
                 pix_q_all.astype(np.float64), idx_q, nn_q2t, nn_t2q,
                 tau_px=cycle_tau_px)
             ok = keep & (sims_fwd > sim_threshold)
-            conf_tau = float(self.cfg.get("conf_tau", 0.0))
-            if conf_tau > 0:
+            conf_tau_q = float(self.cfg.get("conf_tau_q",
+                                             self.cfg.get("conf_tau", 0.0)))
+            conf_tau_t = float(self.cfg.get("conf_tau_t",
+                                             self.cfg.get("conf_tau", 0.0)))
+            if conf_tau_q > 0 or conf_tau_t > 0:
                 conf_q_all = desc_cache[sel[0]][5]
-                conf_t_all = np.concatenate(
-                    [desc_cache[i][6] for i in sel], axis=0)
-                ok = ok & (conf_q_all[idx_q] > conf_tau) \
-                    & (conf_t_all[nn_q2t] > conf_tau)
+                if conf_tau_q > 0:
+                    ok = ok & (conf_q_all[idx_q] > conf_tau_q)
+                if conf_tau_t > 0:
+                    conf_t_all = np.concatenate(
+                        [desc_cache[i][6] for i in sel], axis=0)
+                    ok = ok & (conf_t_all[nn_q2t] > conf_tau_t)
             iq, it = idx_q[ok], nn_q2t[ok]
             ss = sims_fwd[ok]
             for j, i in enumerate(sel):
@@ -484,10 +489,16 @@ class Mast3rMatcher:
                     p3_q, p3_t, nn_q2t, sims_fwd, rng,
                     tau_obj_frac=geom_tau, ransac_iters=geom_iters)
             ok = keep & (sims_fwd > sim_threshold)     # 相似度阈值过滤
-            conf_tau = float(self.cfg.get("conf_tau", 0.0))
-            if conf_tau > 0:
-                # desc 置信度过滤（探针：好/坏对应 conf 差 +0.18~0.38，10/10 帧分离）
-                ok = ok & (conf_q[idx_q] > conf_tau) & (conf_t[nn_q2t] > conf_tau)
+            conf_tau_q = float(self.cfg.get("conf_tau_q",
+                                             self.cfg.get("conf_tau", 0.0)))
+            conf_tau_t = float(self.cfg.get("conf_tau_t",
+                                             self.cfg.get("conf_tau", 0.0)))
+            if conf_tau_q > 0:
+                # desc 置信度过滤（查询侧；探针 10/10 帧好/坏对应分离）
+                ok = ok & (conf_q[idx_q] > conf_tau_q)
+            if conf_tau_t > 0:
+                # 模板侧单独阈值：合成渲染图 conf 系统性低（p95≈0.6）
+                ok = ok & (conf_t[nn_q2t] > conf_tau_t)
             iq = idx_q[ok]
             it = nn_q2t[ok]
             if p3_q is not None:
