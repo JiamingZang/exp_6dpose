@@ -49,6 +49,7 @@
 | dense80_depthc_ia_multi_iou.yaml | done | 6d-multi-iou 几何择优判负：5 物体均值 57.00（-4.00 vs ia）——掩码偏差污染 mask_iou，三个没货物体仍负；渲染比较量两候选全负 |
 | dense80_depthc_ia_multi_inl.yaml | done | 6d-multi-inl inlier 几何择优判负：5 物体均值 57.67（-3.33 vs ia）——duck +11.67 最佳但池没货物体全负；**择优指标系列收官（align/iou/inl 全负）**，多候选择优结案 |
 | dense80_depthc_ia_768.yaml | done | 6d-match-768 分辨率侧收官判负：duck 29.17（-18.33，模板同步全修复版）——查询裁剪 512 是信息上限，768 插值放大污染 desc；附带代码修复（模板编码与查询长边同步 + 三处 pix_t 换算，512 档行为不变）|
+| dense80_depthc_ia_conf.yaml | done | 6d-conf-filter desc_conf 过滤判负：v1 双侧 1.5 灾难 4.17%（模板合成图 conf 系统性低 p95≈0.6 被全滤）；v2 查询侧 1.3 仍负（-6.67）——好/坏 conf 重叠带大伤数量，RANSAC 本鲁棒；Proj 85.83 全场最高但 ADD 跌 = 平移病态印证 |
 | 6d-pnp-multisol（诊断）| done | 挑战 2 判死：duck 60 帧 × 30 次 RANSAC 全单解——硬对应 + EPnP 无多解性；inlier 择优 60/60 命中；瓶颈确证候选池生成 |
 | dense80_depthc_ia_track.yaml | done | 6d-track-seed 帧间跟踪种子：duck 50.83（+3.33 vs 基线）但低于 multi 55.83；代价 +40% 不划算；仅论文视频扩展素材 |
 | dense80_depthc_ia_multirefine.yaml | done | 6d-multi-refine 种子级渲染对比优化判负：duck 49.17（-6.66 vs multi）——refiner 盆底择优失效（ADD -6.66 但 Proj +9.16）；渲染对比优化两轮判负结案 |
