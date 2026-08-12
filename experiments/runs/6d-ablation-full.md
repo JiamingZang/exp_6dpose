@@ -24,7 +24,7 @@
 
 | 项 | 值 |
 |---|---|
-| Config | `configs/ablations/01..10.yaml`，base = `configs/current/dense80_depthc_guided.yaml`（粗位姿，论文方法贡献口径）|
+| Config | `configs/ablations/`（10 组 yaml），base = `configs/current/dense80_depthc_guided.yaml`（粗位姿，论文方法贡献口径）|
 | Code change | 无（run_ablation.py 已有）|
 | Data split | **120 帧子集 × 5 弱物体**（duck/ape/cat/holepuncher/phone，消融最有区分度）；全量口径待磁盘清理后补 |
 | Metrics | ADD(S)@0.1d / Proj@5px / 5cm5°（run_ablation.py 自动出表）|
