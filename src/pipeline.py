@@ -962,6 +962,23 @@ class PoseEstimator:
         if not ranked:
             return None
         best = ranked[0]
+        # 模板层解集共识（selection=consensus）：inlier 择优可能选中"自洽地错"
+        # 的错误模板解（内点可超 1000）；正确模板的解在 3D 空间收敛成簇，
+        # 错误解随机分散。最大簇（≥2）内 inlier 最大者替换 best；无簇不换
+        # （安全门控：池内无好假设的物体不受损）。joint PnP 的替换门控随之
+        # 收紧：共识生效时，joint 解须与共识解位姿接近（同盆地）才允许覆盖。
+        consensus_active = False
+        cb = None
+        if strategy == "consensus":
+            from .solver.selection import consensus_best, pose_distance
+            cb = consensus_best(
+                results,
+                rot_tau_deg=float(s_cfg.get("consensus_rot_tau", 10.0)),
+                trans_tau_mm=float(s_cfg.get("consensus_trans_tau", 25.0)))
+            if cb is not None and (cb.template_idx != best.template_idx
+                                   or cb.n_inliers > best.n_inliers):
+                best = cb
+                consensus_active = True
 
         # 联合 PnP 精化：单模板视角的对应集中在物体可见面（近平面点集），
         # EPnP 存在深度/旋转歧义；把 sim 分数最高的 joint_templates 个模板
@@ -981,6 +998,13 @@ class PoseEstimator:
                 flag=str(s_cfg.get("pnp_flag", "epnp")),
                 sym_transforms=self._sym_T or None)
             if r_j.success and r_j.n_inliers >= best.n_inliers:
+                # 共识档：joint 解须与共识解同盆地（位姿接近）才允许覆盖，
+                # 防合并对应把共识解换坏（multi 系"无条件换种子"教训）
+                if consensus_active:
+                    jr, jt = pose_distance(r_j.R, r_j.t, cb.R, cb.t)
+                    if (jr > float(s_cfg.get("consensus_rot_tau", 10.0))
+                            or jt > float(s_cfg.get("consensus_trans_tau", 25.0))):
+                        r_j.success = False
                 # joint 结果同样过深度一致性（复用 best 模板的深度预测）
                 if (bool(s_cfg.get("depth_filter", False))
                         and ex.get("mask_crop") is not None and A_q >= 16):

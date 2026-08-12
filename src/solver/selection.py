@@ -40,6 +40,64 @@ def stable_prior_score(R: np.ndarray, axes: np.ndarray, g: np.ndarray) -> float:
     return -float(np.degrees(np.arccos(cos)).min())
 
 
+def pose_distance(R1: np.ndarray, t1: np.ndarray,
+                  R2: np.ndarray, t2: np.ndarray) -> tuple:
+    """两个 w2c 位姿的差异：(旋转角 °, 平移差 mm)。"""
+    dR = R1 @ R2.T
+    cos = float(np.clip((np.trace(dR) - 1.0) / 2.0, -1.0, 1.0))
+    rot_deg = float(np.degrees(np.arccos(cos)))
+    trans_mm = float(np.linalg.norm(t1 - t2))
+    return rot_deg, trans_mm
+
+
+def consensus_best(results: List[PnPResult],
+                   rot_tau_deg: float = 10.0,
+                   trans_tau_mm: float = 25.0) -> Optional[PnPResult]:
+    """模板层解集共识择优：成功解按位姿距离聚类，返回最大簇内 inlier 最大者。
+
+    动机：错误模板的解"自洽地错"（内点可超 1000），inlier 择优可能选中它；
+    但不同错误模板的解在 3D 空间随机分散，而正确模板的解收敛到真值附近——
+    位姿空间聚类天然形成"正确簇"。只返回簇内解（|簇|≥2），孤立解不参与，
+    无簇时返回 None（上层保持原 best，安全门控：池内无好假设的物体不受损）。
+
+    Args:
+        results: 各候选模板的 PnPResult（成功项参与聚类）
+        rot_tau_deg: 旋转近邻阈值（度）
+        trans_tau_mm: 平移近邻阈值（mm）
+    Returns:
+        共识解（簇内 inlier 最大者）；无有效簇返回 None
+    """
+    pool = [r for r in results if r.success]
+    if len(pool) < 2:
+        return None
+    # 并查集：位姿近邻传递闭包
+    parent = list(range(len(pool)))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i in range(len(pool)):
+        for j in range(i + 1, len(pool)):
+            rd, td = pose_distance(pool[i].R, pool[i].t,
+                                   pool[j].R, pool[j].t)
+            if rd <= rot_tau_deg and td <= trans_tau_mm:
+                ri, rj = find(i), find(j)
+                if ri != rj:
+                    parent[ri] = rj
+    # 找最大簇（size ≥ 2）
+    clusters: dict = {}
+    for i in range(len(pool)):
+        clusters.setdefault(find(i), []).append(i)
+    best_cluster = max((c for c in clusters.values() if len(c) >= 2),
+                       key=len, default=None)
+    if best_cluster is None:
+        return None
+    return max((pool[i] for i in best_cluster), key=lambda r: r.n_inliers)
+
+
 def rank_candidates(results: List[PnPResult], strategy: str = "inlier",
                     keep_failed: bool = False,
                     prior_info: Optional[tuple] = None) -> List[PnPResult]:

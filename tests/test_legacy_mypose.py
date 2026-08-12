@@ -946,3 +946,53 @@ def test_rendered_depth_backprojects_to_gaussian_centers(tmp_path):
     # 坐标图路线与深度路线在同一像素上应给出同一 3D 点（两条路线一致性）
     cm = bank["coord_maps"][0]
     np.testing.assert_allclose(cm[ys, xs], pts3d, atol=tol)
+
+
+# ---------------------------------------------------------------------------
+# 模板层解集共识择优（selection=consensus，6d-consensus）
+# ---------------------------------------------------------------------------
+
+def test_pose_distance_basic():
+    from src.solver.selection import pose_distance
+    R = np.eye(3)
+    rd, td = pose_distance(R, np.zeros(3), R, np.zeros(3))
+    assert rd < 1e-6 and td < 1e-6
+    # 绕 z 轴 90°
+    cz, sz = np.cos(np.pi / 2), np.sin(np.pi / 2)
+    Rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
+    rd, td = pose_distance(R, np.zeros(3), Rz, np.zeros(3))
+    assert abs(rd - 90.0) < 1e-3 and td < 1e-6
+    # 平移 10mm
+    rd, td = pose_distance(R, np.zeros(3), R, np.array([10.0, 0, 0]))
+    assert rd < 1e-6 and abs(td - 10.0) < 1e-6
+
+
+def test_consensus_best_selects_cluster_not_inlier_max():
+    from src.solver.selection import consensus_best
+    R = np.eye(3)
+    # 正确簇：3 个解收敛到真值附近（小幅扰动）
+    cluster = [
+        PnPResult(success=True, R=R, t=np.array([100.0, 0, 500]),
+                  n_inliers=900, template_idx=0),
+        PnPResult(success=True, R=R, t=np.array([102.0, 1, 499]),
+                  n_inliers=700, template_idx=1),
+        PnPResult(success=True, R=R, t=np.array([99.0, -1, 501]),
+                  n_inliers=800, template_idx=2),
+    ]
+    # 错误解：inlier 最大但位姿远离（自洽地错）
+    bad = PnPResult(success=True, R=R, t=np.array([300.0, 0, 900]),
+                    n_inliers=1500, template_idx=9)
+    rs = cluster + [bad]
+    cb = consensus_best(rs)
+    assert cb is not None and cb.n_inliers == 900      # 簇内 inlier 最大（非全局最大）
+    assert cb.template_idx == 0
+    # 全孤立解 → 无簇 → None（安全门控）
+    iso = [PnPResult(success=True, R=R, t=np.array([100.0, 0, 500]), n_inliers=5, template_idx=i)
+           for i in range(4)]
+    iso[1].t = np.array([200.0, 0, 600])
+    iso[2].t = np.array([300.0, 0, 700])
+    iso[3].t = np.array([400.0, 0, 800])
+    assert consensus_best(iso) is None
+    # 失败项不参与
+    rs2 = cluster + [PnPResult(success=False, n_inliers=9999, template_idx=7)]
+    assert consensus_best(rs2).template_idx == 0

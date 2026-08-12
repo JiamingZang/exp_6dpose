@@ -1,0 +1,12 @@
+# 模板层解集共识择优（6d-consensus）：selection=consensus
+# 动机：inlier 择优可能选中"自洽地错"的错误模板解（失败帧 90.5% 内点
+# >1000）；正确模板的解在 3D 位姿空间收敛成簇，错误解随机分散——位姿
+# 聚类天然形成正确簇，且无簇时保守不换（池内无好假设的物体不受损，
+# 针对 multi 系"无条件换种子换坏 ape/phone"的教训）。
+# 口径：粗位姿链路（guided base），纯几何（不依赖渲染/掩码）。
+base: dense80_depthc_guided.yaml
+
+solver:
+  selection: consensus
+  consensus_rot_tau: 10.0
+  consensus_trans_tau: 25.0
