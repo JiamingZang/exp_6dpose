@@ -199,11 +199,24 @@ class LightGlueMatcher:
         wdir = Path(__file__).resolve().parents[2] / "weights"
         self.extractor = SuperPoint(max_num_keypoints=int(
             cfg_matching.get("lg_max_kps", 2048))).eval().to(device)
-        self.extractor.load_state_dict(
-            torch.load(wdir / "superpoint_v1.pth", map_location="cpu"))
+        self.extractor.load_state_dict(torch.load(
+            wdir / "superpoint_v1.pth", map_location="cpu",
+            weights_only=False))
         self.lg = LightGlue(features="superpoint").eval().to(device)
-        self.lg.load_state_dict(
-            torch.load(wdir / "superpoint_lightglue.pth", map_location="cpu"))
+        _sd = torch.load(wdir / "superpoint_lightglue.pth",
+                         map_location="cpu", weights_only=False)
+        # v0.1_arxiv 旧键名 → 新版 transformers.N 结构
+        # （self_attn.N.* / cross_attn.N.* / log_assignment.N.r）
+        _sd2 = {}
+        for _k, _v in _sd.items():
+            if _k.startswith("self_attn.") or _k.startswith("cross_attn."):
+                _i, _rest = _k.split(".", 2)[1], _k.split(".", 2)[2]
+                _sd2[f"transformers.{_i}.{_k.split('.')[0]}.{_rest}"] = _v
+            elif _k.startswith("log_assignment."):
+                _sd2[f"transformers.{_k.split('.')[1]}.log_assignment.r"] = _v
+            else:
+                _sd2[_k] = _v
+        self.lg.load_state_dict(_sd2, strict=False)
         self.conf_tau = float(cfg_matching.get("lg_conf_tau", 0.5))
         self._tmpl_kps = None      # list[(N,2) 像素]
         self._tmpl_desc = None     # list[(N,256)]
@@ -269,15 +282,16 @@ class LightGlueMatcher:
                                              (q_img.shape[0], q_img.shape[1])),
                     "image1": self._lg_input(kt, dt, self._tmpl_shape[i]),
                 })
-            m = out["matches0"].cpu().numpy()
+            m = out["matches0"].cpu().numpy()      # (Mq,) 每查询点的模板索引，-1=无匹配
             conf = out["matching_scores0"].cpu().numpy()
-            ok = conf > self.conf_tau
+            ok = (m >= 0) & (conf > self.conf_tau)
             if ok.sum() == 0:
                 continue
-            m = m[ok]
+            iq_lg = np.nonzero(ok)[0]
+            it_lg = m[ok]
             conf = conf[ok]
-            px_q = kq[m[:, 0]]
-            px_t = kt[m[:, 1]]
+            px_q = kq[iq_lg]
+            px_t = kt[it_lg]
             scores[i] = float(conf.mean())
             p2, p3, ss = sample_correspondences(
                 px_q.astype(np.float64), px_t.astype(np.float64), conf,

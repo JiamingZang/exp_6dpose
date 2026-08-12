@@ -6,3 +6,4 @@ base: dense80_depthc_guided.yaml
 
 matching:
   matcher: lightglue
+  lg_conf_tau: 0.0
