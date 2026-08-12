@@ -175,11 +175,26 @@ class Mast3rMatcher:
         """预提取全部模板的编码器特征缓存（离线一次，供全部查询帧复用）。
 
         Args:
-            images: (M,S,S,3) uint8 模板图（S=256，天然 16 的倍数）
+            images: (M,S,S,3) uint8 模板图（S=512，天然 16 的倍数）
             alphas: (M,S,S) 模板 alpha（前景掩码来源）
+
+        模板编码分辨率与查询必须一致（long_side）：MASt3R 的 patch 固定
+        16px，若模板 512 而查询 768，两侧 patch 的物理尺度不同，互最近邻
+        的 desc 语义错位（6d-match-768 首轮判负的直接原因）。模板图在此
+        resize 到 long_side；self._tmpl_scale = 原生/编码，供 match() 把
+        模板像素换算回原生系（coord_map 查表索引不变）。
         """
         feats, poss, shapes, fgs = [], [], [], []
+        tscale = 1.0
         for im, a in zip(images, alphas):
+            if max(im.shape[:2]) != self.long_side:
+                import cv2
+                orig_h = im.shape[0]
+                im, _ = _resize_to_multiple16(im, self.long_side)
+                a = cv2.resize(a.astype(np.float32),
+                               (im.shape[1], im.shape[0]),
+                               interpolation=cv2.INTER_LINEAR)
+                tscale = orig_h / im.shape[0]
             f, p, s = self._encode(im)
             feats.append(f)
             poss.append(p)
@@ -187,6 +202,8 @@ class Mast3rMatcher:
             fgs.append(np.asarray(a, dtype=np.float32) > fg_thresh)
         self._tmpl_feats, self._tmpl_pos = feats, poss
         self._tmpl_shapes, self._tmpl_fg = shapes, fgs
+        # 像素换算系数：编码系 → 原生系（512 档 = 1.0，行为不变）
+        self._tmpl_scale = 1.0 / tscale if tscale != 1.0 else 1.0
 
     # ------------------------------------------------------------------
     def _decode_batch(self, fq, pq, sq, idxs):
@@ -304,9 +321,10 @@ class Mast3rMatcher:
                 # 前景像素的相机系 3D（几何一致性过滤用；只取 fg，省内存）
                 p3_q = pts3d_q.reshape(-1, 3)[flat_q_full].float().cpu().numpy()
                 p3_t = pts3d_t.reshape(-1, 3)[flat_t].float().cpu().numpy()
+                pix_t_native = np.stack([txs, tys], axis=1) * self._tmpl_scale
                 desc_cache[i] = (
                     dq[flat_q_full].half().cpu(), dt.half().cpu(),
-                    np.stack([txs, tys], axis=1), p3_q, p3_t)
+                    pix_t_native, p3_q, p3_t)
                 if prefilter_order is not None:
                     is_top = (i == int(decode_idxs[0]))
                 else:
@@ -316,7 +334,7 @@ class Mast3rMatcher:
                     top_full = (int(i),
                                 desc_q.float().cpu().numpy().astype(np.float16),
                                 dt.half().cpu().numpy(),
-                                np.stack([txs, tys], axis=1))
+                                pix_t_native.copy())
                 del desc_q, desc_t, dq, dt, sim_sub, p3_q, p3_t
 
         # ---- 第二遍：Top-K 稠密互最近邻 + cycle 过滤 + 阈值 + 采样 ----

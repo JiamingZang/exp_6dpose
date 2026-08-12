@@ -1,0 +1,7 @@
+# 匹配分辨率 768（6d-match-768）：MASt3R 输入长边 512 → 768
+# 动机：gap-oracle 结案"候选池生成（MASt3R 对应质量）是总瓶颈"；
+# 1024 已试 OOM（24.8GB 峰值），768 为中间档（冒烟峰值 6.6GB）
+base: dense80_depthc_ia.yaml
+
+matching:
+  image_size: 768
