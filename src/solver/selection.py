@@ -50,9 +50,32 @@ def pose_distance(R1: np.ndarray, t1: np.ndarray,
     return rot_deg, trans_mm
 
 
+def _pose_neighbor(R1: np.ndarray, t1: np.ndarray,
+                   R2: np.ndarray, t2: np.ndarray,
+                   rot_tau_deg: float, trans_tau_mm: float,
+                   sym_transforms: Optional[List[np.ndarray]] = None) -> bool:
+    """两解是否位姿近邻（对称物体按等价位姿类判定）。
+
+    物体系离散对称 S（4x4，见 datasets/linemod.discrete_symmetry_transforms）
+    把位姿 (R, t) 映射到等价表示 (R@Rs, R@ts + t)——同一物理位姿的
+    对称等价表示在原始旋转距离下会被拆散（对称物体的候选解天然落在
+    不同等价表示上），聚类前先按等价类判定近邻。
+    """
+    candidates = [(R2, t2)]
+    for T in (sym_transforms or []):
+        Rs, ts = T[:3, :3], T[:3, 3]
+        candidates.append((R2 @ Rs, R2 @ ts + t2))
+    return any(
+        pose_distance(R1, t1, Re, te)[0] <= rot_tau_deg
+        and pose_distance(R1, t1, Re, te)[1] <= trans_tau_mm
+        for Re, te in candidates)
+
+
 def consensus_best(results: List[PnPResult],
                    rot_tau_deg: float = 10.0,
-                   trans_tau_mm: float = 25.0) -> Optional[PnPResult]:
+                   trans_tau_mm: float = 25.0,
+                   sym_transforms: Optional[List[np.ndarray]] = None
+                   ) -> Optional[PnPResult]:
     """模板层解集共识择优：成功解按位姿距离聚类，返回最大簇内 inlier 最大者。
 
     动机：错误模板的解"自洽地错"（内点可超 1000），inlier 择优可能选中它；
@@ -64,6 +87,8 @@ def consensus_best(results: List[PnPResult],
         results: 各候选模板的 PnPResult（成功项参与聚类）
         rot_tau_deg: 旋转近邻阈值（度）
         trans_tau_mm: 平移近邻阈值（mm）
+        sym_transforms: 物体系离散对称变换（4x4）；对称物体的等价表示
+            按同一物理位姿聚类（_pose_neighbor），非对称物体传 None
     Returns:
         共识解（簇内 inlier 最大者）；无有效簇返回 None
     """
@@ -81,9 +106,10 @@ def consensus_best(results: List[PnPResult],
 
     for i in range(len(pool)):
         for j in range(i + 1, len(pool)):
-            rd, td = pose_distance(pool[i].R, pool[i].t,
-                                   pool[j].R, pool[j].t)
-            if rd <= rot_tau_deg and td <= trans_tau_mm:
+            if _pose_neighbor(pool[i].R, pool[i].t,
+                              pool[j].R, pool[j].t,
+                              rot_tau_deg, trans_tau_mm,
+                              sym_transforms):
                 ri, rj = find(i), find(j)
                 if ri != rj:
                     parent[ri] = rj

@@ -975,7 +975,8 @@ class PoseEstimator:
             cb = consensus_best(
                 results,
                 rot_tau_deg=float(s_cfg.get("consensus_rot_tau", 10.0)),
-                trans_tau_mm=float(s_cfg.get("consensus_trans_tau", 25.0)))
+                trans_tau_mm=float(s_cfg.get("consensus_trans_tau", 25.0)),
+                sym_transforms=self._sym_T or None)
             if cb is not None and (cb.template_idx != best.template_idx
                                    or cb.n_inliers > best.n_inliers):
                 best = cb

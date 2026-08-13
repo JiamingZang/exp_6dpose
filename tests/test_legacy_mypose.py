@@ -996,3 +996,38 @@ def test_consensus_best_selects_cluster_not_inlier_max():
     # 失败项不参与
     rs2 = cluster + [PnPResult(success=False, n_inliers=9999, template_idx=7)]
     assert consensus_best(rs2).template_idx == 0
+
+
+def test_consensus_sym_equivalence_merges_cluster():
+    """对称物体：等价表示（绕对称轴 90°×k）必须按同一物理位姿聚类。
+
+    四个解各落在同一物理位姿的一个等价表示上（Rz90^k·Rx(小扰动)）：
+    无 sym_transforms 时任意两解相距 ~90° > τ → 无簇 → None（保守门控，
+    上层保留 inlier 最大的错误解）；传 sym_transforms 后四解合一簇。
+    """
+    from src.solver.selection import consensus_best
+    cz, sz = 0.0, 1.0
+    Rz90 = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
+    sym = np.eye(4); sym[:3, :3] = Rz90         # 物体系四重对称（4x4）
+
+    def rx(deg):
+        a = np.radians(deg)
+        c, s = np.cos(a), np.sin(a)
+        return np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
+
+    t0 = np.array([100.0, 0, 500])
+    reps = [np.eye(3), Rz90, Rz90 @ Rz90, Rz90 @ Rz90 @ Rz90]
+    pert = [rx(3), rx(-2), rx(4), rx(-3)]
+    rs = [
+        PnPResult(success=True, R=reps[k] @ pert[k],
+                  t=t0 + np.array([float(k % 2 * 2), 0, 0]),
+                  n_inliers=[900, 800, 700, 650][k], template_idx=k)
+        for k in range(4)
+    ]
+    rs.append(PnPResult(success=True, R=rx(90), t=np.array([300.0, 0, 900]),
+                        n_inliers=1500, template_idx=9))
+    # 不传对称变换：等价表示相距 ~90° 无法聚类 → 无簇 → None（保守门控）
+    assert consensus_best(rs) is None
+    # 传对称变换：四等价表示并入同一簇 → 簇内 inlier 最大者（900）
+    cb = consensus_best(rs, sym_transforms=[sym])
+    assert cb is not None and cb.n_inliers == 900 and cb.template_idx == 0
