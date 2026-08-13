@@ -1,0 +1,11 @@
+# 论文 §3.3.2 视角采样密度消融补充：fibonacci 24 视角 × 5 旋转 = 120t。
+# 16→24 视角把相邻视角夹角从 ~47.5° 压到 ~36°，直接检验"模板视角密度
+# 是否提升 MASt3R 对应质量 → 粗位姿/端到端 ADD"（80t 甜点论断目前只有
+# cube8-vs-fibonacci 跨口径证据，fibonacci 密度本身从未消融）。
+# 仅改模板采样，其余与主表完全一致；需 onboard 新库 + 全新匹配。
+base: ../current/dense80_depthc_guided.yaml
+
+templates:
+  viewpoint_mode: fibonacci
+  n_viewpoints: 24
+  n_inplane: 5
