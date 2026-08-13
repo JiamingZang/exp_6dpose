@@ -110,6 +110,11 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   **-3.00**；Proj 持平（duck 82.50 vs 82.00）——更紧阈值减少对应数量、
   不伤投影精度但伤深度病态物体的 ADD。ε=8/10 待批处理出数（预计 06:10
   后）；正式数字以 ablation_ransac_eps.json 为准。
+- `08-14 04:10`：**09 组 ε=8 预览（缓存聚合）**：MEAN **40.67**（duck 22.50 /
+  ape 34.17 / cat 45.83 / holepuncher 42.50 / phone 58.33），vs 基线
+  **-8.50**。ε 曲线呈锐峰：3→46.17（-3.00）、5→49.17、8→40.67（-8.50）——
+  过松阈值放大假内点（"自洽地错"机制，§4.1）比过紧削减对应危害更大；
+  duck 跌最狠（30.83→22.50）。ε=10 待出。
 
 ## Result
 
