@@ -107,7 +107,7 @@ faba5ca0）作废；765467ef（guided base）有效。
 | 07 selection |  |  |  | inlier 命中主表；similarity/weighted 排队 |
 | 09 ransac_eps |  |  |  | 5.0 档命中主表；3/8/10 排队 |
 | 10 segmenter |  |  |  | 已有 6d-loc-upper 数字，跳过 |
-| 02 n_templates |  |  |  | 8t 库 onboard 完成（02 组内部）；24t/40t 排队 |
+| 02 n_templates | 80t: 49.33 | 8t: 36.17 / 24t: 31.83 / 40t: 19.83 | **视角采样模式主导** | cube8 顶点采样系统性差（40t vs 80t 同为 5 旋转 -29.5）；cube8 下加旋转冗余有害（8t>24t>40t）；fibonacci 均匀覆盖是精度前提 |
 | 08 renderer |  |  |  | pyrender_cad 需 OSMesa（已配）；排队 |
 | 05 geometry |  |  |  | 跳过（VGGT 未装）|
 
