@@ -900,17 +900,16 @@ class PoseEstimator:
                 pts3d = cm[yt, xt]
                 # 坐标图无效像素（背景/alpha 过低置 0）剔除
                 valid = np.abs(pts3d).sum(axis=1) > 0
+            corr_list.append((pts2d[valid], pts3d[valid],
+                              m.pix_t[valid], m.pix_q[valid],
+                              self.bank.images[m.template_idx]
+                              if self.bank.images is not None else None))
             # 查询侧 3D（MASt3R 成对重建，查询相机系）：有则做深度一致性
             # 内点判定（深度+重投影双条件），把 5px 阈值内的错误对应按
             # 3D 深度结构剔除，收紧 tz/rot 条件数（solver.depth_consistency）
             p3q = getattr(m, "pts3d_q", None)
             p3q_ok = (p3q is not None and len(p3q) == len(pts3d)
                       and bool(s_cfg.get("depth_consistency", False)))
-            corr_list.append((pts2d[valid], pts3d[valid],
-                              m.pix_t[valid], m.pix_q[valid],
-                              self.bank.images[m.template_idx]
-                              if self.bank.images is not None else None,
-                              p3q[valid] if p3q_ok else None))
             r = ransac_pnp(
                 pts2d[valid], pts3d[valid], K_query,
                 reproj_px=float(s_cfg.get("ransac_reproj_px", 5.0)),
@@ -997,29 +996,6 @@ class PoseEstimator:
         if joint_k >= 2 and len(corr_list) >= joint_k:
             j2 = np.concatenate([c[0] for c in corr_list[:joint_k]])
             j3 = np.concatenate([c[1] for c in corr_list[:joint_k]])
-            # 联合 PnP 同样启用查询侧深度一致性（dc2）：K≥20 时 rank 11-12
-            # 的弱模板对应混入合并集，无 dc2 时产生 3-9× 假内点爆炸
-            # （duck K=20 非单调根因，2026-08-13 定位）；合并对应按模板
-            # 顺序拼接 pts3d_q，深度结构校验把假对应剔除。
-            j3q = None
-            if bool(s_cfg.get("depth_consistency", False)):
-                p3q_parts = [np.asarray(c[5])[np.abs(np.asarray(c[1])).sum(axis=1) > 0]
-                             if c[5] is not None else None
-                             for c in corr_list[:joint_k]]
-                if all(p is not None for p in p3q_parts):
-                    if bool(s_cfg.get("joint_scale_align", False)):
-                        # MASt3R 成对重建逐对尺度漂移：同一查询裁剪下各对
-                        # 重建的度量尺度不同，单一自校准深度比会把尺度偏的
-                        # 模板对应整批误删（实测 -2.5~-9.2）；按中位深度比
-                        # 对齐到第一模板对的尺度后深度检查才跨模板一致。
-                        z0 = float(np.median(p3q_parts[0][:, 2]))
-                        if z0 > 1e-6:
-                            p3q_parts = [
-                                p3q_parts[0]] + [
-                                p * (z0 / float(np.median(p[:, 2])))
-                                for p in p3q_parts[1:]
-                                if float(np.median(p[:, 2])) > 1e-6]
-                    j3q = np.concatenate(p3q_parts, axis=0).astype(np.float32)
             r_j = ransac_pnp(
                 j2, j3, K_query,
                 reproj_px=float(s_cfg.get("ransac_reproj_px", 5.0)),
@@ -1028,9 +1004,7 @@ class PoseEstimator:
                 refine_lm=bool(s_cfg.get("refine_lm", True)),
                 min_correspondences=int(s_cfg.get("min_correspondences", 6)),
                 flag=str(s_cfg.get("pnp_flag", "epnp")),
-                sym_transforms=self._sym_T or None,
-                pts3d_q=j3q,
-                depth_tau_frac=float(s_cfg.get("depth_tau_frac", 0.05)))
+                sym_transforms=self._sym_T or None)
             if r_j.success and r_j.n_inliers >= best.n_inliers:
                 # 共识档：joint 解须与共识解同盆地（位姿接近）才允许覆盖，
                 # 防合并对应把共识解换坏（multi 系"无条件换种子"教训）。
@@ -1085,7 +1059,7 @@ class PoseEstimator:
         all_p3 = np.empty((len(idx), 3))
         off = np.zeros((len(idx), 2))
         start = 0
-        for j2k, j3k, ptk, pqk, tpl_img, _p3q in corr_k:
+        for j2k, j3k, ptk, pqk, tpl_img in corr_k:
             nk = len(j2k)
             in_tpl = (idx >= start) & (idx < start + nk)
             gpos = np.nonzero(in_tpl)[0]     # 内点序号（all_* 行索引）
