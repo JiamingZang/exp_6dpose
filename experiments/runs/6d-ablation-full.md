@@ -96,6 +96,14 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   ~08-14 23:30 收尾（09 6h + 07 7.2h + 08 3.6h + 03 3.6h + tzdepth 2.7h）；
   inlier_ratio/reproj 策略由 6d-adaptive-k-sim 的 cand_* 缓存离线重排补齐
   （cand_ncorr/cand_reproj 已落盘，08-13），不再占用 GPU。
+- `08-13 23:18`：**批处理重启（缓存 meta 修复 0299fbe）**——排查发现
+  ε5.0 每物体 ~40min 是"假 cache hit"：缓存文件级 meta 比对含 matches_dir
+  （主表运行是 matches13_dc2、消融是 None），_load_cache_records 整文件
+  丢弃 → 主表 hash 档全部重匹配（ε5.0 已白烧 3.6h；07-inlier/08-3dgs 还
+  会再各烧 3.6h）。修复：文件级 meta 只比对 cfg_hash（逐帧指纹兜底，
+  206 测试通过），杀掉旧进程重启批处理——02 四档全部缓存命中（~15 min），
+  07-inlier/08-3dgs 免烧 7.2h。新链：02 → 09（ε8/ε10 全新）→ 07 → 08 →
+  03 → tzdepth，预计 ~08-14 20:00 收尾。
 
 ## Result
 
