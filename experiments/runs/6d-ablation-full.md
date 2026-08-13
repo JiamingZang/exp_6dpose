@@ -127,6 +127,15 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   深度比对齐（joint_scale_align，默认关保持现状）；筛选档 A（align）/
   B（tau 0.12）已排入链（duck+ape 各 ~1.4h，ape 恢复即信号）。**主表 78.07
   为修复前代码；若筛选胜出 → 全量 champion 复跑；若失败 → 回退 0f0d0bb。**
+- `08-14 07:15`：**决策：回退 0f0d0bb（fad8943）**——筛选（align/tau12）的
+  期望值低于回退成本：即使 ape 恢复，post-fix+align 仍要重跑 01/02/09/主表
+  （>50h）；而回退后 pre-fix 主线（78.07/K 曲线/01/02）全部成立，只需一次
+  重启把 09/07/08/03/tzdepth 统一到 pre-fix（~38h 自动）。已删 post-fix
+  缓存（1224de51/dabe9cfc/2fbd44c3/fe2de02e/49138670 × 5 物体，25 个文件）
+  与 align 配置/链段；批处理重启（PID 537528，pre-fix 代码）。09 组将重跑
+  pre-fix（~10h），ε5.0 应恢复 ≈49.17（与 01 K=40 一致性自检）。
+  joint dc2 记为证伪实验：duck +5.00 / 净 -4.00，机制 = 逐对尺度漂移误删
+  有效对应（§5.3 讨论素材）；per-template dc2（原功能）保留。
 
 ## Result
 
