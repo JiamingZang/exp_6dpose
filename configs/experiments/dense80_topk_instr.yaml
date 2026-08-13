@@ -1,0 +1,9 @@
+# 自适应 K 早停离线仿真数据采集档（6d-adaptive-k-sim，08-13）。
+# base = 主表配置；metrics.topk_best 打开 return_candidates 路径，
+# 帧缓存落盘逐候选 inliers/相似度/位姿/解码顺序（08-13 代码）。
+# 仿真（scripts/analysis/simulate_adaptive_k.py）在其上重放早停规则，
+# 输出 (ADD, mean K) Pareto——规则胜出后才实施在线早停。
+base: ../current/dense80_depthc_guided.yaml
+
+metrics:
+  topk_best: [40]

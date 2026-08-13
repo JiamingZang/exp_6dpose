@@ -79,6 +79,17 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   8t×4 + 24t×5 + 40t ape 补 pt 共 11 次（ape 40t npz 已备份 .40tprebak）；
   批处理链：01 → onboard fill → 02 → 09 → 07 → 08 → 03(dinov2patch) →
   tzdepth5（第四章 RGB-D 证据）。
+- `08-13 02:13-02:32`：**GPU 竞争事故**——历史遗留的第二个批处理进程
+  （00:55 起等 01_topk）与 00:50 的首个进程同台，02/09/07 三组全部 OOM
+  （torch.OutOfMemoryError ×5），02 组 onboard 的 8t 模板已落盘但评测全废；
+  02:32 起干净重跑（v3 脚本，当前 PID 469262）。
+- `08-13 05:28-16:32`：02 组重跑成功（rc=0）：8t/24t/40t 全量 onboard +
+  评测，结果见 Result 表。
+- `08-13 16:32-`：09 组进行中（ε=3 全新匹配 3.6h 完成；ε=5.0 命中主表
+  缓存 49138670 秒过逐物体重写；ε=8/10 全新匹配各 ~3.6h）。之后自动续
+  07（命中主表缓存，快）→ 08（osmesa）→ 03（dinov2patch）→ tzdepth5。
+  监控信号：缓存文件 mtime（`ls -lt outputs/ablation_cache/`），日志因
+  python 块缓冲滞后数小时，不可作实时信号。
 
 ## Result
 
