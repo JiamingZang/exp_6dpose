@@ -978,7 +978,7 @@ class PoseEstimator:
         consensus_active = False
         cb = None
         if strategy == "consensus":
-            from .solver.selection import consensus_best, pose_distance
+            from .solver.selection import consensus_best
             cb = consensus_best(
                 results,
                 rot_tau_deg=float(s_cfg.get("consensus_rot_tau", 10.0)),
@@ -1021,11 +1021,15 @@ class PoseEstimator:
                 depth_tau_frac=float(s_cfg.get("depth_tau_frac", 0.05)))
             if r_j.success and r_j.n_inliers >= best.n_inliers:
                 # 共识档：joint 解须与共识解同盆地（位姿接近）才允许覆盖，
-                # 防合并对应把共识解换坏（multi 系"无条件换种子"教训）
+                # 防合并对应把共识解换坏（multi 系"无条件换种子"教训）。
+                # 对称物体按等价位姿类判定（与 consensus_best 聚类同口径）。
                 if consensus_active:
-                    jr, jt = pose_distance(r_j.R, r_j.t, cb.R, cb.t)
-                    if (jr > float(s_cfg.get("consensus_rot_tau", 10.0))
-                            or jt > float(s_cfg.get("consensus_trans_tau", 25.0))):
+                    from .solver.selection import _pose_neighbor
+                    if not _pose_neighbor(
+                            r_j.R, r_j.t, cb.R, cb.t,
+                            float(s_cfg.get("consensus_rot_tau", 10.0)),
+                            float(s_cfg.get("consensus_trans_tau", 25.0)),
+                            self._sym_T or None):
                         r_j.success = False
                 # joint 结果同样过深度一致性（复用 best 模板的深度预测）
                 if (bool(s_cfg.get("depth_filter", False))
@@ -2364,6 +2368,19 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
                 "cand_scores": ([c.get("score") for c in res.candidates]
                                 if res.candidates else []),
                 "cand_order": res.decode_order,
+                # 逐候选位姿（模型系，ADD 精确重算用；~4KB/帧可忽略）
+                "cand_Rs": ([c.get("R") for c in res.candidates]
+                            if res.candidates else []),
+                "cand_ts": ([c.get("t") for c in res.candidates]
+                            if res.candidates else []),
+                # 逐候选对应数/内点重投影残差（inlier_ratio / reproj 策略
+                # 离线重排用，与 07 组消融互补，08-13）
+                "cand_ncorr": ([c.get("n_correspondences")
+                                for c in res.candidates]
+                               if res.candidates else []),
+                "cand_reproj": ([c.get("mean_inlier_reproj_px")
+                                 for c in res.candidates]
+                                if res.candidates else []),
             }
             cache_fh.write(_json.dumps(rec, default=float) + "\n")
             cache_fh.flush()

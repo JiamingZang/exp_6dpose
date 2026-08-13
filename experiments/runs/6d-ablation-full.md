@@ -87,9 +87,15 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   评测，结果见 Result 表。
 - `08-13 16:32-`：09 组进行中（ε=3 全新匹配 3.6h 完成；ε=5.0 命中主表
   缓存 49138670 秒过逐物体重写；ε=8/10 全新匹配各 ~3.6h）。之后自动续
-  07（命中主表缓存，快）→ 08（osmesa）→ 03（dinov2patch）→ tzdepth5。
+  07 → 08（osmesa）→ 03（dinov2patch）→ tzdepth5。
   监控信号：缓存文件 mtime（`ls -lt outputs/ablation_cache/`），日志因
   python 块缓冲滞后数小时，不可作实时信号。
+- `08-13 22:10`：**07 耗时修正**——帧缓存的 cfg_hash 覆盖整个配置，selection
+  非默认值（similarity/weighted）各自新 hash → **全新匹配各 ~3.6h**（不是
+  缓存命中）。07 组预计 ~7.2h（inlier 档命中主缓存除外）。总链预计
+  ~08-14 23:30 收尾（09 6h + 07 7.2h + 08 3.6h + 03 3.6h + tzdepth 2.7h）；
+  inlier_ratio/reproj 策略由 6d-adaptive-k-sim 的 cand_* 缓存离线重排补齐
+  （cand_ncorr/cand_reproj 已落盘，08-13），不再占用 GPU。
 
 ## Result
 
