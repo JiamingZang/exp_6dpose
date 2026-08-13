@@ -52,7 +52,9 @@
 | dense80_depthc_ia_conf.yaml | done | 6d-conf-filter desc_conf 过滤判负：v1 双侧 1.5 灾难 4.17%（模板合成图 conf 系统性低 p95≈0.6 被全滤）；v2 查询侧 1.3 仍负（-6.67）——好/坏 conf 重叠带大伤数量，RANSAC 本鲁棒；Proj 85.83 全场最高但 ADD 跌 = 平移病态印证 |
 | dense80_depthc_lg.yaml | done | 6d-lightglue 稀疏匹配判负**全灭**：duck 120 帧 0.00/0.00/0.00——域差下稀疏对应 ~29 对 → PnP 数值爆炸（t~5e16）；对应质量两路线对比：稠密 desc+几何先验 >> 零训练稀疏匹配；与 conf-filter/768 三线闭合（代码 16eb089，LightGlueMatcher 保留作消融档）|
 | dense80_depthc_dinov2patch.yaml | running | 6d-ablation-full 03_matcher 组：DINOv2 patch token 稠密匹配器消融（120 帧 × 5 弱物体，批处理 b4zzkzkup）|
-| dense80_depthc_consensus.yaml | todo | 6d-consensus 模板层解集共识择优：inlier 择优选中"自洽地错"解时，位姿聚类（10°/25mm）最大簇内 inlier 择优替换；无簇保守不换（安全门控）；纯几何不依赖渲染/掩码 |
+| dense80_depthc_consensus.yaml | running | 6d-consensus 模板层解集共识择优：inlier 择优选中"自洽地错"解时，位姿聚类（10°/25mm）最大簇内 inlier 择优替换；无簇保守不换（安全门控）；纯几何不依赖渲染/掩码；08-13 对称等价位姿聚类 + joint 门控等价类判定（c48d8aa/51d70de）；5 弱物体 120 帧排队（duck verify 后自动跑）|
+| experiments/dense80_topk_instr.yaml | current | 6d-adaptive-k-sim 数据采集档（guided + topk_best [40]）：缓存落盘逐候选 inliers/位姿/解码顺序（cand_*），离线早停仿真 + 07 组 inlier_ratio/reproj 离线重排 |
+| experiments/dense80_fib24.yaml | todo | 6d-fib24 fibonacci 视角密度消融（24×5=120t，夹角 47.5°→~36°）：80t 甜点论断的密度缺口验证；adaptive-k 之后自动跑 |
 | 6d-pnp-multisol（诊断）| done | 挑战 2 判死：duck 60 帧 × 30 次 RANSAC 全单解——硬对应 + EPnP 无多解性；inlier 择优 60/60 命中；瓶颈确证候选池生成 |
 | dense80_depthc_ia_track.yaml | done | 6d-track-seed 帧间跟踪种子：duck 50.83（+3.33 vs 基线）但低于 multi 55.83；代价 +40% 不划算；仅论文视频扩展素材 |
 | dense80_depthc_ia_multirefine.yaml | done | 6d-multi-refine 种子级渲染对比优化判负：duck 49.17（-6.66 vs multi）——refiner 盆底择优失效（ADD -6.66 但 Proj +9.16）；渲染对比优化两轮判负结案 |
