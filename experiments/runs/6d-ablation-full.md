@@ -104,6 +104,12 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   206 测试通过），杀掉旧进程重启批处理——02 四档全部缓存命中（~15 min），
   07-inlier/08-3dgs 免烧 7.2h。新链：02 → 09（ε8/ε10 全新）→ 07 → 08 →
   03 → tzdepth，预计 ~08-14 20:00 收尾。
+- `08-14 03:05`：**09 组 ε=3 预览（缓存聚合，非 run_ablation 正式输出）**：
+  5 物体均值 ADD(S)@0.1d = **46.17**（duck 31.67 / ape 42.50 / cat 53.33 /
+  holepuncher 43.33 / phone 60.00），vs 基线 ε=5.0（主表口径）49.17 =
+  **-3.00**；Proj 持平（duck 82.50 vs 82.00）——更紧阈值减少对应数量、
+  不伤投影精度但伤深度病态物体的 ADD。ε=8/10 待批处理出数（预计 06:10
+  后）；正式数字以 ablation_ransac_eps.json 为准。
 
 ## Result
 
