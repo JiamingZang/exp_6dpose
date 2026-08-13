@@ -1007,6 +1007,18 @@ class PoseEstimator:
                              if c[5] is not None else None
                              for c in corr_list[:joint_k]]
                 if all(p is not None for p in p3q_parts):
+                    if bool(s_cfg.get("joint_scale_align", False)):
+                        # MASt3R 成对重建逐对尺度漂移：同一查询裁剪下各对
+                        # 重建的度量尺度不同，单一自校准深度比会把尺度偏的
+                        # 模板对应整批误删（实测 -2.5~-9.2）；按中位深度比
+                        # 对齐到第一模板对的尺度后深度检查才跨模板一致。
+                        z0 = float(np.median(p3q_parts[0][:, 2]))
+                        if z0 > 1e-6:
+                            p3q_parts = [
+                                p3q_parts[0]] + [
+                                p * (z0 / float(np.median(p[:, 2])))
+                                for p in p3q_parts[1:]
+                                if float(np.median(p[:, 2])) > 1e-6]
                     j3q = np.concatenate(p3q_parts, axis=0).astype(np.float32)
             r_j = ransac_pnp(
                 j2, j3, K_query,

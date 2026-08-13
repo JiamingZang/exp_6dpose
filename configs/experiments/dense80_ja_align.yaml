@@ -1,0 +1,6 @@
+# 6d-joint-align 筛选档 A：合并对应按中位深度比对对齐到首模板尺度
+# （MASt3R 逐对尺度漂移修复，08-14）。其余与主表一致。
+base: ../current/dense80_depthc_guided.yaml
+
+solver:
+  joint_scale_align: true
