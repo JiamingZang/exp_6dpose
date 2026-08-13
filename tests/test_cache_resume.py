@@ -24,10 +24,23 @@ def test_load_cache_records_matching_meta(tmp_path):
     assert out[1]["m"]["add_01d"] == 0.5
 
 
-def test_load_cache_records_mismatched_meta_returns_empty(tmp_path):
+def test_load_cache_records_mismatched_hash_returns_empty(tmp_path):
     cp = tmp_path / "phone.jsonl"
-    cp.write_text(json.dumps({"__meta__": _meta(matches_dir="other")}) + "\n")
+    cp.write_text(json.dumps(
+        {"__meta__": _meta(matches_dir="m", cfg_hash="y" * 40)}) + "\n")
     assert _load_cache_records(cp, _meta()) == {}
+
+
+def test_load_cache_records_ignores_matches_dir_provenance(tmp_path):
+    """08-13 修复：matches_dir 只是产物来源（live 提取 vs 预提取），同一
+    cfg_hash 下逐帧等价——只比对 cfg_hash，避免主表 hash 的消融档白重匹配。"""
+    cp = tmp_path / "phone.jsonl"
+    cp.write_text("\n".join([
+        json.dumps({"__meta__": _meta(matches_dir="outputs/matches13_dc2/phone")}),
+        json.dumps(_rec(1)), json.dumps(_rec(2)),
+    ]) + "\n")
+    out = _load_cache_records(cp, _meta(matches_dir=None))
+    assert set(out) == {1, 2}
 
 
 def test_load_cache_records_skips_wrong_fingerprint_lines(tmp_path):

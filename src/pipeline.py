@@ -2093,6 +2093,12 @@ def _load_cache_records(cp: Path, meta: Dict) -> Dict[int, Dict]:
 
     文件不存在 / 空 / meta 不匹配时返回空 dict（不抛错，调用方决定
     是否重定向到指纹专属文件）。
+
+    文件级 meta 只比对 cfg_hash：matches_dir 只是产物来源（live 提取 vs
+    预提取落盘），同一 cfg 下二者内容逐帧等价（08-13 教训：比对它会让
+    主表 hash 的消融档白白重匹配 ~3.6h/次，且提取代码代际本就无法用它
+    区分——cfg 不变的代码改动两侧同样漏检）。真实内容变化（换 matches
+    产物、换 bank、换 PnP 参数）全部反映在 cfg_hash 上，逐帧指纹兜底。
     """
     import json as _json
     out: Dict[int, Dict] = {}
@@ -2100,7 +2106,8 @@ def _load_cache_records(cp: Path, meta: Dict) -> Dict[int, Dict]:
         return out
     lines = cp.read_text().splitlines()
     head = _json.loads(lines[0]) if lines and lines[0].strip() else None
-    if not head or head.get("__meta__") != meta:
+    head_meta = head.get("__meta__") if head else None
+    if not head_meta or head_meta.get("cfg_hash") != meta["cfg_hash"]:
         return out
     for line in lines[1:]:
         if not line.strip():
