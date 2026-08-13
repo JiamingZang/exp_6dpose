@@ -464,6 +464,10 @@ class EstimateResult:
     # 坐标系；失败项 R/t 为 None，只占 topK 窗口名额（历史对照口径，
     # 见 VERIFICATION.md §8.4）。topK best 评估用。
     candidates: List[Dict] = field(default_factory=list)
+    # 实际解码顺序（定位 DINOv2 相似度降序截断到 top_k；mast3r 全解码档为
+    # None）。自适应 K 早停离线仿真用：与 cand_inliers 对齐可重建逐模板
+    # 内点数随解码的累积轨迹。
+    decode_order: Optional[List[int]] = None
 
 
 class PoseEstimator:
@@ -842,7 +846,10 @@ class PoseEstimator:
                 "matches": matches, "sxy": (sx, sy),
                 "top_desc": top_desc,
                 "alts": alts, "timings": timings,
-                "depth_img": depth_img}
+                "depth_img": depth_img,
+                "decode_order": (
+                    list(prefilter_order[:int(m_cfg.get("top_k", 40))])
+                    if prefilter_order is not None else None)}
 
     # ------------------------------------------------------------------
     def _solve_pnp(self, ex: Dict, K_query: np.ndarray):
@@ -1915,7 +1922,8 @@ class PoseEstimator:
                               best_template=chosen.template_idx,
                               timings=timings, candidates=candidates,
                               R_coarse=coarse_R, t_coarse=coarse_t,
-                              R_refined=refined_R, t_refined=refined_t)
+                              R_refined=refined_R, t_refined=refined_t,
+                              decode_order=ex.get("decode_order"))
 
     # ------------------------------------------------------------------
     def estimate(self, img_rgb_u8: np.ndarray, K_query: np.ndarray,
@@ -2350,6 +2358,12 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
                 # 候选模板索引（诊断用：GT 最近模板是否进池/被选，08-11）
                 "cand_templates": ([c.get("template_idx") for c in res.candidates]
                                    if res.candidates else []),
+                # 逐候选内点数/相似度（自适应 K 早停离线仿真用，08-13）
+                "cand_inliers": ([c.get("n_inliers") for c in res.candidates]
+                                 if res.candidates else []),
+                "cand_scores": ([c.get("score") for c in res.candidates]
+                                if res.candidates else []),
+                "cand_order": res.decode_order,
             }
             cache_fh.write(_json.dumps(rec, default=float) + "\n")
             cache_fh.flush()
