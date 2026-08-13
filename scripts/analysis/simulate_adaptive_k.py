@@ -82,11 +82,13 @@ def run(args):
 
     print(f"[sim] object={args.object} frames={len(ids)} "
           f"baseline(K=40 inlier-best) ADD(S)@0.1d={base_add:.2f}%")
-    print(f"{'w':>3} {'δ':>5} {'min_k':>5} | {'ADD%':>7} {'ΔADD':>7} "
-          f"{'meanK':>6} {'K≤20帧%':>8}")
+    print(f"{'w':>3} {'δ':>7} {'min_k':>5} | {'ADD%':>7} {'ΔADD':>7} "
+          f"{'meanK':>6}")
     results = []
+    rules = [(f"abs{delta}", delta, None) for delta in args.delta]
+    rules += [(f"rel{ratio}", None, ratio) for ratio in args.ratio]
     for w in args.w:
-        for delta in args.delta:
+        for rname, delta, ratio in rules:
             for min_k in args.min_k:
                 ok, ksum = 0, 0
                 for fid in ids:
@@ -105,13 +107,15 @@ def run(args):
                     if not order:
                         ksum += 0
                         continue
-                    # 早停扫描
+                    # 早停扫描：增益须超阈值（绝对 δ 或相对 ratio）才不算停滞
                     best_t, best_inl = order[0], sol[order[0]][0]
                     stall = 0
                     k_used = len(order)
                     for i, tidx in enumerate(order[1:], start=2):
                         inl = sol[tidx][0]
-                        if inl > best_inl + delta:
+                        improved = (inl > best_inl + delta if delta is not None
+                                    else inl > best_inl * (1.0 + ratio))
+                        if improved:
                             best_t, best_inl = tidx, inl
                             stall = 0
                         else:
@@ -125,11 +129,10 @@ def run(args):
                         ok += 1
                 add = 100.0 * ok / len(ids)
                 mean_k = ksum / len(ids)
-                results.append((w, delta, min_k, add, add - base_add, mean_k))
+                results.append((w, rname, min_k, add, add - base_add, mean_k))
     results.sort(key=lambda x: -x[3])
-    for w, delta, min_k, add, dadd, mean_k in results:
-        k20 = sum(1 for _, _, _, _, _, mk in results if mk <= 20)
-        print(f"{w:>3} {delta:>5} {min_k:>5} | {add:>7.2f} {dadd:>+7.2f} "
+    for w, rname, min_k, add, dadd, mean_k in results:
+        print(f"{w:>3} {rname:>7} {min_k:>5} | {add:>7.2f} {dadd:>+7.2f} "
               f"{mean_k:>6.1f}")
     return 0
 
@@ -140,11 +143,14 @@ def main():
     ap.add_argument("--object", required=True)
     ap.add_argument("--max-frames", type=int, default=120)
     ap.add_argument("--w", default="2,3,5", help="停滞窗口（连续无增益模板数）")
-    ap.add_argument("--delta", default="0,50,200", help="增益阈值（内点数）")
+    ap.add_argument("--delta", default="0,50,200", help="绝对增益阈值（内点数）")
+    ap.add_argument("--ratio", default="0.02,0.05,0.10",
+                    help="相对增益阈值（如 0.02 = 需超当前最优 2%）")
     ap.add_argument("--min-k", default="5,8,12", help="最小解码数")
     args = ap.parse_args()
     args.w = [int(x) for x in args.w.split(",")]
     args.delta = [int(x) for x in args.delta.split(",")]
+    args.ratio = [float(x) for x in args.ratio.split(",")]
     args.min_k = [int(x) for x in args.min_k.split(",")]
     sys.exit(run(args))
 
