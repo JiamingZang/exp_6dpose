@@ -172,7 +172,11 @@ def render_template_bank_pyrender(mesh_path, scale: float,
                            ambient_light=[0.4, 0.4, 0.4])
     scene.add(pyrender.Mesh.from_trimesh(mesh))
     cam = pyrender.IntrinsicsCamera(fx=K_render[0, 0], fy=K_render[1, 1],
-                                    cx=K_render[0, 2], cy=K_render[1, 2])
+                                    cx=K_render[0, 2], cy=K_render[1, 2],
+                                    # pyrender 默认 zfar=10，而渲染距离
+                                    # radius≈400 远超远平面——物体被整体裁剪
+                                    # （08 消融首跑全空白模板的根因，08-15）
+                                    znear=radius / 100, zfar=radius * 4)
     cam_node = scene.add(cam, pose=np.eye(4))
     light = pyrender.DirectionalLight(intensity=3.0)
     light_node = scene.add(light, pose=np.eye(4))

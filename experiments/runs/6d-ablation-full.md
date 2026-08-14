@@ -156,6 +156,15 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   1/600 帧（0.2%）不同**——择优判据对最终质量影响可忽略；"择优价值=为联合
   解/引导精化提供高质量起点"（论文 §3.6.2）获逐帧证据。预判（21:25
   "weighted 档也 ≈ 49-50"）命中 ✓
+- `08-15 01:20`：**08 pyrender 全空白模板根因定位与二次修复**——首跑 pyrender
+  臂 0.00 分（全 120 帧失败）非 PnP/匹配问题：模板库 alphas/coord_maps 全零、
+  images 全白。独立渲染探针定位：盒子网格正常、duck 网格正常、OSMesa
+  GL 4.5 正常，唯独默认 `IntrinsicsCamera` 的 **zfar=10** 把 radius≈400 的
+  渲染距离整体裁剪（近平面 0.05 也在物体内）。修复：
+  `template_renderer.py` 加 `znear=radius/100, zfar=radius*4`；端到端冒烟
+  通过（alphas 每视图 ~19.5k 像素）。空白库已删、9cac5520 失败缓存已清
+  （zfar 是代码级修复，cfg_hash 不变，不清缓存会命中复用旧错误记录）；
+  批处理加 08-refix 段，pyrender 臂重新 onboard+评测，预计 03:10 出真实数字。
 - `08-15 01:00`：**精化链阶段贡献量化（主缓存 R_coarse vs m，论文 §4.1.1）**：
   5 弱物体 × 120 帧（guided+抛光口径），粗位姿独立命中率 49.2%（295/600），
   精化挽救 5 帧 vs 回归 4 帧（净 +1 帧，0.8% vs 0.7%）——**失败帧在精化前
