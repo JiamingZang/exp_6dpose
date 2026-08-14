@@ -148,6 +148,14 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   清理残留批处理包装进程（其 cmdline 含 run_ablation_batch.sh 字样会卡死
   verify 的 pgrep 等待循环）。chain2（/tmp/post_chain2.sh，559911）排队：
   等 exp_fib24/DONE 后跑 11_joint_templates + ia-gateoff。
+- `08-15 00:17`：**07-weighted 官方 49.50**（duck 30.83 / ape 47.50 / cat 53.33 /
+  holepuncher 50.83 / phone 65.00）——与 similarity 逐物体完全相同、与 inlier
+  仅差 ape 一帧（46.67→47.50）；**三档结案 inlier 49.33 / sim 49.50 /
+  weighted 49.50**。逐帧分析（缓存聚合，00:00）：**88.2% 帧（529/600）三档
+  数值位姿不同**（精化链把粗选差异放大进最终位姿），但 **ADD 命中结果仅
+  1/600 帧（0.2%）不同**——择优判据对最终质量影响可忽略；"择优价值=为联合
+  解/引导精化提供高质量起点"（论文 §3.6.2）获逐帧证据。预判（21:25
+  "weighted 档也 ≈ 49-50"）命中 ✓
 - `08-14 21:25`：**07-similarity 档（缓存聚合）MEAN 49.50**（duck 30.83 /
   ape 47.50 / cat 53.33 / holepuncher 50.83 / phone 65.00）≈ **inlier 49.33
   （几乎逐物体相同）**——**择优判据不敏感**：selection=similarity 的位姿
@@ -200,7 +208,7 @@ faba5ca0）作废；765467ef（guided base）有效。
 | 03 matcher |  |  |  | dinov2_patch 档排队（v3 批处理）|
 | 04 localization |  |  |  | 已有 6d-det-align 数字，跳过 |
 | 06 scale_align |  |  |  | 默认档命中主表；false 档未排（价值低）|
-| 07 selection |  |  |  | inlier/similarity/weighted 排队（pre-fix 统一重跑）|
+| 07 selection | inlier: 49.33 | similarity: 49.50 / weighted: 49.50 | Δ≤0.17 | **择优判据不敏感结案**：三档命中结果仅 1/600 帧（0.2%）不同、逐物体几乎全同（唯一差异 ape 46.67→47.50 一帧）——联合 PnP（J=12）+精化级联吸收粗选差异；数值位姿虽在 88% 帧不同但全部落在同一命中桶内；K 曲线增益主因=更多模板进联合解（K=1 30.50→K=40 49.17）而非择优判据；官方 ablation_selection.json |
 | 09 ransac_eps | ε5.0: 49.33 | ε3: 48.83 / ε8: 43.33 / ε10: 38.00 | ε 锐峰：3-5px 平台（Δ-0.5），≥8px 真崩溃（-6.0/-11.3）——过松阈值放大假内点自洽地错（§4.1），duck 最敏感（30.83→19.17→13.33）| 官方 ablation_ransac_eps.json（post-fix 备份 *_postfix_backup.json）；ε5.0=49.33 与 02-80t 一致 ✓ pre-fix 回退验证通过；holepuncher ε8 +0.84 唯一异质正例 |
 | 10 segmenter |  |  |  | 已有 6d-loc-upper 数字，跳过 |
 | 02 n_templates | 80t: 49.33 | 8t: 36.17 / 24t: 31.83 / 40t: 19.83 | **视角采样模式主导** | cube8 顶点采样系统性差（40t vs 80t 同为 5 旋转 -29.5）；cube8 下加旋转冗余有害（8t>24t>40t）；fibonacci 均匀覆盖是精度前提 |
