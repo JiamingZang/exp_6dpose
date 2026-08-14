@@ -156,6 +156,12 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   1/600 帧（0.2%）不同**——择优判据对最终质量影响可忽略；"择优价值=为联合
   解/引导精化提供高质量起点"（论文 §3.6.2）获逐帧证据。预判（21:25
   "weighted 档也 ≈ 49-50"）命中 ✓
+- `08-15 01:00`：**精化链阶段贡献量化（主缓存 R_coarse vs m，论文 §4.1.1）**：
+  5 弱物体 × 120 帧（guided+抛光口径），粗位姿独立命中率 49.2%（295/600），
+  精化挽救 5 帧 vs 回归 4 帧（净 +1 帧，0.8% vs 0.7%）——**失败帧在精化前
+  已确定，粗位姿就是决策点**；唯一的显著翻帧机制是 iter_align 重渲染
+  （120 帧 duck 级联 +16.67）。与 gap-oracle"候选池生成=总瓶颈"互为印证；
+  抛光单独在 5 弱物体上仅 +0.16（粗位姿 49.17 → 含抛光 49.33）。
 - `08-15 00:30`：**08/03 组首跑崩溃定位与修复**——(1) 08 pyrender_cad 臂崩于
   PoseEstimator 无条件构造 PoseRefiner 缺 .pt（pyrender onboard 只建 .npz
   库不训练 3DGS）：load_ablation 新增 extra_overrides（按 sweep 值附加
