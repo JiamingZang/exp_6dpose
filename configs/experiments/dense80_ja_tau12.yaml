@@ -1,6 +1,0 @@
-# 6d-joint-align 筛选档 B：联合 PnP 深度一致性阈值放宽 0.05 → 0.12
-# （过紧误删跨模板对应的粗放替代方案，08-14；若 A 档失败才考虑）。
-base: ../current/dense80_depthc_guided.yaml
-
-solver:
-  depth_tau_frac: 0.12
