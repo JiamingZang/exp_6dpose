@@ -153,6 +153,15 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   登记 11_joint_templates（sweep 1/5/10/20，12=免费基线）量化并裁决峰值。
   iter_align 接受门（align_loss 变差回退）也未消融，登记 6d-ia-gateoff
   （iter_align_gate 旗标默认 true 行为不变）。
+- `08-14 17:00`：**pre-fix ε8/ε10 预览（缓存聚合，方法与 ε5.0 校验一致——
+  ε5.0 聚合 49.33 = 02-80t 官方值）**：ε8 MEAN **43.33**（duck 19.17 /
+  ape 38.33 / cat 46.67 / holepuncher 51.67 / phone 60.83）= **-6.00**；
+  ε10 前两物体 **22.08**（duck 13.33 / ape 30.83）= **-27 量级**。结论：
+  **过松阈值惩罚是真实的（非 dc2 伪影）**——ε3 的惩罚是 dc2 伪影
+  （pre-fix ε3 48.83 ≈ 基线 49.33），但 ε8/ε10 在 pre-fix 下依旧崩溃，
+  与 post-fix 同向（40.67/35.67）；"假内点自洽地错"机制（§4.1）随 ε 放大，
+  duck（弱纹理）最惨（30.83→19.17→13.33）。ε 曲线故事定型：3-5px 平台
+  鲁棒，8-10px 崩溃，默认 5 合理。holepuncher ε8 +0.84 是唯一异质正例。
 ## Result
 
 **01 topk 组已出（5 弱物体 × 120 帧均值，guided 粗位姿口径；K=1/5/10/20 来自
@@ -178,7 +187,7 @@ faba5ca0）作废；765467ef（guided base）有效。
 | 04 localization |  |  |  | 已有 6d-det-align 数字，跳过 |
 | 06 scale_align |  |  |  | 默认档命中主表；false 档未排（价值低）|
 | 07 selection |  |  |  | inlier/similarity/weighted 排队（pre-fix 统一重跑）|
-| 09 ransac_eps |  |  |  | pre-fix 重跑中：ε3 预览 48.73 ≈ 基线（ε3 惩罚系 dc2 伪影，已回退）；ε8/ε10 待出 |
+| 09 ransac_eps | ε5.0: 49.33 | ε3: 48.83 / ε8: 43.33 / ε10: 38.00 | ε 锐峰：3-5px 平台（Δ-0.5），≥8px 真崩溃（-6.0/-11.3）——过松阈值放大假内点自洽地错（§4.1），duck 最敏感（30.83→19.17→13.33）| 官方 ablation_ransac_eps.json（post-fix 备份 *_postfix_backup.json）；ε5.0=49.33 与 02-80t 一致 ✓ pre-fix 回退验证通过；holepuncher ε8 +0.84 唯一异质正例 |
 | 10 segmenter |  |  |  | 已有 6d-loc-upper 数字，跳过 |
 | 02 n_templates | 80t: 49.33 | 8t: 36.17 / 24t: 31.83 / 40t: 19.83 | **视角采样模式主导** | cube8 顶点采样系统性差（40t vs 80t 同为 5 旋转 -29.5）；cube8 下加旋转冗余有害（8t>24t>40t）；fibonacci 均匀覆盖是精度前提 |
 | 08 renderer |  |  |  | pyrender_cad 需 OSMesa（已配）；排队 |
