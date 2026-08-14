@@ -162,12 +162,12 @@ faba5ca0）作废；765467ef（guided base）有效。
 
 | 组 | baseline | this run | delta | note |
 |---|---|---:|---:|---|
-| 01 topk | K=40: 49.17 | K=1: 30.50 / K=5: 40.00 / K=10: 42.50 / K=20: 43.50 | K↑ 单调增益（duck 待验证）| K=40=主表口径；K 曲线入论文 5.4 |
+| 01 topk | K=40: 49.17 | K=1: 30.50 / K=5: 40.00 / K=10: 42.50 / K=20: 43.50 | 总体上升（duck K=20 单点回退，pre-fix 复现待 verify）| K=40=主表口径；K 曲线入论文 5.4；duck 全档验证排队 |
 | 03 matcher |  |  |  | dinov2_patch 档排队（v3 批处理）|
 | 04 localization |  |  |  | 已有 6d-det-align 数字，跳过 |
 | 06 scale_align |  |  |  | 默认档命中主表；false 档未排（价值低）|
-| 07 selection |  |  |  | inlier 命中主表；similarity/weighted 排队 |
-| 09 ransac_eps |  |  |  | 5.0 档命中主表；3/8/10 排队 |
+| 07 selection |  |  |  | inlier/similarity/weighted 排队（pre-fix 统一重跑）|
+| 09 ransac_eps |  |  |  | pre-fix 重跑中：ε3 预览 48.73 ≈ 基线（ε3 惩罚系 dc2 伪影，已回退）；ε8/ε10 待出 |
 | 10 segmenter |  |  |  | 已有 6d-loc-upper 数字，跳过 |
 | 02 n_templates | 80t: 49.33 | 8t: 36.17 / 24t: 31.83 / 40t: 19.83 | **视角采样模式主导** | cube8 顶点采样系统性差（40t vs 80t 同为 5 旋转 -29.5）；cube8 下加旋转冗余有害（8t>24t>40t）；fibonacci 均匀覆盖是精度前提 |
 | 08 renderer |  |  |  | pyrender_cad 需 OSMesa（已配）；排队 |
