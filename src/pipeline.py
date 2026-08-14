@@ -800,9 +800,12 @@ class PoseEstimator:
         # 仅当 top1 与 top2 分数接近（或 top1 本身低置信）时才启用：
         # 平时不做无用功；近失时对 top-K 候选各跑一遍匹配，_solve 用
         # 3DGS 渲染对齐损失选优（错误 mask 的 crop 里没有目标物体）。
+        # loc_alt=false 时整体跳过（消融：量化该路径的 ADD 贡献 vs
+        # 弱物体约 53% 帧 +3.8s 的代价，默认 true 行为不变）。
         alts = []
         if (self._loc_mode == "dino"
                 and self._verifier is not None
+                and bool(d_cfg.get("loc_alt", True))
                 and len(loc.candidates) >= 2):
             gap = float(d_cfg.get("loc_verify_gap", 0.05))
             min_score = float(d_cfg.get("loc_verify_min_score", 0.35))

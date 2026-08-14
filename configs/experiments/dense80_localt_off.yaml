@@ -1,0 +1,9 @@
+# 定位候选消歧（loc_alt）消融（6d-localt-off，08-14 登记）：
+# 关闭备选候选匹配（§3.6.5 定位候选消歧的原料），渲染验证择优等其余
+# 机制不受影响（仅跳过 alt 候选的解码与渲染消歧）。
+# 动机：弱物体 53% 帧触发 alt 解码（单次 3.8s，平均 +2.0s/帧）——
+# 量化该机制对 ADD 的贡献与 2s/帧 代价的权衡；若判负则 champion 可提速。
+base: ../current/dense80_depthc_ia.yaml
+
+detection:
+  loc_alt: false
