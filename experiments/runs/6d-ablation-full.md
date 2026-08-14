@@ -148,6 +148,12 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   清理残留批处理包装进程（其 cmdline 含 run_ablation_batch.sh 字样会卡死
   verify 的 pgrep 等待循环）。chain2（/tmp/post_chain2.sh，559911）排队：
   等 exp_fib24/DONE 后跑 11_joint_templates + ia-gateoff。
+- `08-14 19:10`：**ε5 vs ε10 逐帧交叉分析（缓存，论文 §5.3.3 机制证据）**：
+  变坏帧（ε5 对 ε10 错）101 vs 变好帧 33（duck 23:2 / ape 24:5 / cat 23:6 /
+  holepuncher 23:15 / phone 8:5）——净 -68 帧；**变坏帧的内点数随 ε 膨胀
+  +21~43%**（duck 28599→34762、cat 18302→26148、holepuncher 22715→28164）：
+  过松阈值让自洽错误位姿获得更多假内点支撑（"自洽地错"放大机制的直接
+  证据）；双错帧占大头（duck 81/120 本就在 ε5 失败），ε10 是加剧而非翻转。
 - `08-14 18:45`：**07_selection 组**：inlier 档 = 49138670（主配置 hash，sweep 值
   与 base 相同 → 全缓存命中），结果 49.33 与基线精确一致（逐帧确定性复现 ✓，
   兼作缓存一致性检查）；**哈希勘误：fe2de02e 实为 similarity（非 08-13 笔记
