@@ -137,6 +137,11 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   joint dc2 记为证伪实验：duck +5.00 / 净 -4.00，机制 = 逐对尺度漂移误删
   有效对应（§5.3 讨论素材）；per-template dc2（原功能）保留。
 
+- `08-14 13:10`：**pre-fix ε=3 预览（缓存聚合）**：MEAN **48.73**（duck
+  35.83 / ape 47.50 / cat 53.33 / holepuncher 47.50 / phone ~60.4），vs
+  pre-fix 基线 ε5.0（49.17）= **-0.44 几乎持平**——post-fix 下 ε3 的 -3.00
+  惩罚是 joint dc2 的伪影（紧阈值 × 深度检查叠加误删），回退后消失。
+  ε8/ε10 待出（预计 22:50 前），正式数字以 ablation_ransac_eps.json 为准。
 ## Result
 
 **01 topk 组已出（5 弱物体 × 120 帧均值，guided 粗位姿口径；K=1/5/10/20 来自
