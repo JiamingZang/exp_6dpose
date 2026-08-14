@@ -148,6 +148,15 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   清理残留批处理包装进程（其 cmdline 含 run_ablation_batch.sh 字样会卡死
   verify 的 pgrep 等待循环）。chain2（/tmp/post_chain2.sh，559911）排队：
   等 exp_fib24/DONE 后跑 11_joint_templates + ia-gateoff。
+- `08-14 21:25`：**07-similarity 档（缓存聚合）MEAN 49.50**（duck 30.83 /
+  ape 47.50 / cat 53.33 / holepuncher 50.83 / phone 65.00）≈ **inlier 49.33
+  （几乎逐物体相同）**——**择优判据不敏感**：selection=similarity 的位姿
+  输出同样经联合 PnP（J=12，top-12 sim 模板合并重解）替换，合并集与
+  inlier 策略相同 → 输出几乎相同（Δ±0.17）。推论：**K=1（30.50）vs
+  similarity（49.50）的 +19 分差距 = 联合 PnP + 多候选解码的共同贡献，
+  而非择优判据**——K 曲线增益主因是"更多模板进联合解"，择优判据层的
+  边际价值小（预判 weighted 档也 ≈ 49-50，待 0d4cd0d9 官方确认）。论文
+  §5.3.3 择优判据行措辞按此写。
 - `08-14 19:10`：**ε5 vs ε10 逐帧交叉分析（缓存，论文 §5.3.3 机制证据）**：
   变坏帧（ε5 对 ε10 错）101 vs 变好帧 33（duck 23:2 / ape 24:5 / cat 23:6 /
   holepuncher 23:15 / phone 8:5）——净 -68 帧；**变坏帧的内点数随 ε 膨胀
