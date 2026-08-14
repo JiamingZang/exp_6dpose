@@ -148,11 +148,10 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   清理残留批处理包装进程（其 cmdline 含 run_ablation_batch.sh 字样会卡死
   verify 的 pgrep 等待循环）。chain2（/tmp/post_chain2.sh，559911）排队：
   等 exp_fib24/DONE 后跑 11_joint_templates + ia-gateoff。
-- `08-14 18:30`：**发现：联合 PnP 实为 J=12 而非代码默认 3**（default.yaml:168
-  "实测 K=7 最佳"注释与现值不符）——§3.6.3 论文文本已改；J 贡献从未消融，
-  登记 11_joint_templates（sweep 1/5/10/20，12=免费基线）量化并裁决峰值。
-  iter_align 接受门（align_loss 变差回退）也未消融，登记 6d-ia-gateoff
-  （iter_align_gate 旗标默认 true 行为不变）。
+- `08-14 18:45`：**07_selection 组**：inlier 档 = 49138670（主配置 hash，sweep 值
+  与 base 相同 → 全缓存命中），结果 49.33 与基线精确一致（逐帧确定性复现 ✓，
+  兼作缓存一致性检查）；**哈希勘误：fe2de02e 实为 similarity（非 08-13 笔记
+  的 inlier）**——similarity 全新匹配中（~2.2h），weighted（0d4cd0d9）随后。
 - `08-14 17:00`：**pre-fix ε8/ε10 预览（缓存聚合，方法与 ε5.0 校验一致——
   ε5.0 聚合 49.33 = 02-80t 官方值）**：ε8 MEAN **43.33**（duck 19.17 /
   ape 38.33 / cat 46.67 / holepuncher 51.67 / phone 60.83）= **-6.00**；
