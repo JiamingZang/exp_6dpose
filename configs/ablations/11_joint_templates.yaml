@@ -1,0 +1,9 @@
+# 消融：联合 PnP 合并模板数 J（solver.joint_templates）
+# J=1 即关闭联合（纯择优输出）；默认 12（主表口径，default.yaml）；
+# 5/10/20 检验"更深池融合"是否增益（正确模板常排 sim 4-12 位，
+# 联合解看不到它——候选池瓶颈的部分缓解杠杆）。无深度过滤的合并
+# 噪声随 J 增长，J 过大可能回退。12 档免费取自 01 K=40 基线。
+ablation:
+  name: joint_templates
+  sweep_field: solver.joint_templates
+  sweep_values: [1, 5, 10, 20]

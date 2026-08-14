@@ -1269,8 +1269,10 @@ class PoseEstimator:
                 break
             Rc, tc = res.R, res.t
             last_inl = res.n_inliers
-        # 接受/拒绝：渲染对齐损失变差回退粗位姿（与 guided_refine 同纪律）
-        if self._verifier is not None:
+        # 接受/拒绝：渲染对齐损失变差回退粗位姿（与 guided_refine 同纪律）。
+        # iter_align_gate=false 时无条件接受（门消融，默认 true 行为不变）。
+        if (self._verifier is not None
+                and bool(s_cfg.get("iter_align_gate", True))):
             l_before = self._verifier.align_loss(
                 ex["crop"], ex["mask_crop"], K_crop, R, t)
             l_after = self._verifier.align_loss(

@@ -1,0 +1,9 @@
+# iter_align 接受/拒绝门消融（6d-ia-gateoff，08-14 登记）：
+# 关闭渲染对齐损失门（_iter_align 内 l_after>l_before 回退粗位姿），
+# 无条件接受迭代精化结果。量化门的两面性：保护（拒绝坏精化）vs 阻塞
+# （multi-gate 教训：align_loss 与 ADD 相关性弱，门可能挡掉真收益）。
+# base = champion 级联（iter_align 2 轮 + 抛光）。
+base: ../current/dense80_depthc_ia.yaml
+
+solver:
+  iter_align_gate: false
