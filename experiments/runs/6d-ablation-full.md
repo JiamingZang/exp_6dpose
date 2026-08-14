@@ -156,6 +156,11 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   1/600 帧（0.2%）不同**——择优判据对最终质量影响可忽略；"择优价值=为联合
   解/引导精化提供高质量起点"（论文 §3.6.2）获逐帧证据。预判（21:25
   "weighted 档也 ≈ 49-50"）命中 ✓
+- `08-15 06:00`：**03 matcher 官方结案 MEAN 10.16**（duck 0.00 / ape 0.83 /
+  cat 10.83 / holepuncher 15.83 / phone 23.33）vs MASt3R 49.33（-39.2）——
+  **几何对应是 MASt3R 成对解码的特有能力**：DINOv2 单图描述子检索召回够用
+  但稠密对应弱纹理全灭（duck 0.00），纹理越弱差距越大；与 §4.1.1(2)
+  对应质量=模型能力极限互证（05:00 预览命中 ✓）。论文 §5.3.3 匹配模型行已更新。
 - `08-15 02:47`：**08 pyrender 臂真实数字（zfar 修复后）MEAN 1.67**（duck 0 /
   ape 0 / cat 0 / hp 3.33 / phone 5.00）——**成像域决定匹配质量**。排除渲染
   缺陷：模板库投影回检 100% 自洽（coord_maps 反投影全落 alpha 掩码内）；
@@ -237,7 +242,7 @@ faba5ca0）作废；765467ef（guided base）有效。
 | 组 | baseline | this run | delta | note |
 |---|---|---:|---:|---|
 | 01 topk | K=40: 49.17 | K=1: 30.50 / K=5: 40.00 / K=10: 42.50 / K=20: 43.50 | 总体上升（duck K=20 单点回退，pre-fix 复现待 verify）| K=40=主表口径；K 曲线入论文 5.4；duck 全档验证排队 |
-| 03 matcher |  |  |  | dinov2_patch 档排队（v3 批处理）|
+| 03 matcher | MASt3R: 49.33 | DINOv2-patch: **10.16** | -39.2 | **几何对应是 MASt3R 成对解码的特有能力**：单图描述子（DINOv2 patch）检索召回够用（§4.1.1(1) 96.7-100%）但稠密对应弱纹理全灭（duck 0.00 / ape 0.83），纹理越弱差距越大；官方 outputs/exp_dinov2patch/results/ + cache |
 | 04 localization |  |  |  | 已有 6d-det-align 数字，跳过 |
 | 06 scale_align |  |  |  | 默认档命中主表；false 档未排（价值低）|
 | 07 selection | inlier: 49.33 | similarity: 49.50 / weighted: 49.50 | Δ≤0.17 | **择优判据不敏感结案**：三档命中结果仅 1/600 帧（0.2%）不同、逐物体几乎全同（唯一差异 ape 46.67→47.50 一帧）——联合 PnP（J=12）+精化级联吸收粗选差异；数值位姿虽在 88% 帧不同但全部落在同一命中桶内；K 曲线增益主因=更多模板进联合解（K=1 30.50→K=40 49.17）而非择优判据；官方 ablation_selection.json |
