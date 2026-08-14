@@ -142,6 +142,17 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   pre-fix 基线 ε5.0（49.17）= **-0.44 几乎持平**——post-fix 下 ε3 的 -3.00
   惩罚是 joint dc2 的伪影（紧阈值 × 深度检查叠加误删），回退后消失。
   ε8/ε10 待出（预计 22:50 前），正式数字以 ablation_ransac_eps.json 为准。
+- `08-14 18:00`：**链保护**——post_consensus_chain.sh 今晨 11:17 超时死亡
+  （720 次×60s 窗口不够），已改 5000 次重启（559082）；新增
+  /tmp/chain_watchdog.sh（559083）：批处理结束后自动补拉起 verify/chain、
+  清理残留批处理包装进程（其 cmdline 含 run_ablation_batch.sh 字样会卡死
+  verify 的 pgrep 等待循环）。chain2（/tmp/post_chain2.sh，559911）排队：
+  等 exp_fib24/DONE 后跑 11_joint_templates + ia-gateoff。
+- `08-14 18:30`：**发现：联合 PnP 实为 J=12 而非代码默认 3**（default.yaml:168
+  "实测 K=7 最佳"注释与现值不符）——§3.6.3 论文文本已改；J 贡献从未消融，
+  登记 11_joint_templates（sweep 1/5/10/20，12=免费基线）量化并裁决峰值。
+  iter_align 接受门（align_loss 变差回退）也未消融，登记 6d-ia-gateoff
+  （iter_align_gate 旗标默认 true 行为不变）。
 ## Result
 
 **01 topk 组已出（5 弱物体 × 120 帧均值，guided 粗位姿口径；K=1/5/10/20 来自
