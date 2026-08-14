@@ -93,8 +93,13 @@ class Dinov2PatchMatcher:
               top_k: int, sim_threshold: float, cycle_tau_px: float,
               n_sample: int, rng: Optional[np.random.Generator] = None,
               prefilter_order: Optional[np.ndarray] = None
-              ) -> Tuple[List[TemplateMatch], Tuple[float, float], np.ndarray]:
-        """接口与 Mast3rMatcher.match 一致（含 DINOv2 Top-K 预筛）。"""
+              ) -> Tuple[List[TemplateMatch], Tuple[float, float],
+                         np.ndarray, None]:
+        """接口与 Mast3rMatcher.match 一致（含 DINOv2 Top-K 预筛）。
+
+        第 4 返回值 top_full（稠密描述子）不支持：无稠密解码，置 None
+        （引导式对应精化自动跳过，见 pipeline._decode_top_desc）。
+        """
         import cv2
         torch = self.torch
         if self._tmpl_desc is None:
@@ -109,7 +114,7 @@ class Dinov2PatchMatcher:
         fmap = self._dense_desc(q_img)
         ys, xs = np.nonzero(q_mask)
         if len(ys) < 16:
-            return [], sxy, np.full(len(self._tmpl_desc), -np.inf)
+            return [], sxy, np.full(len(self._tmpl_desc), -np.inf), None
         pix_q_all = np.stack([xs, ys], axis=1)
         flat_q = torch.tensor(ys * q_img.shape[1] + xs, device=self.device)
         dq = fmap.reshape(-1, fmap.shape[-1])[flat_q].float()   # (Nq,C)
@@ -150,7 +155,7 @@ class Dinov2PatchMatcher:
                 self._tmpl_pix[i][nn_q2t[ok]].astype(np.float64),
                 sims_fwd[ok], n_sample=n_sample, rng=rng)
             matches.append(TemplateMatch(int(i), float(scores[i]), p2, p3, ss))
-        return matches, sxy, scores
+        return matches, sxy, scores, None
 
 
 class LoFTRMatcher:

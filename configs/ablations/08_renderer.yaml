@@ -2,8 +2,14 @@
 # 3dgs         —— 3DGS 光栅化渲染（本文方法，照片级真实感）
 # pyrender_cad —— 直接用 CAD 网格 OpenGL 光栅化渲染模板（无外观学习，仅几何着色）
 # 渲染器决定模板图像，必须重新 onboard
+# pyrender_cad 臂无 3DGS ckpt（不训练外观模型）：关闭测试时抛光（refine_pose），
+# 其余链路（联合 PnP/guided）同 3dgs 臂；两臂同口径对比见 run 记录（3dgs 臂
+# 粗位姿数字由主缓存 R_coarse 聚合，抛光数字为主表 49.33）。
 ablation:
   name: renderer
   sweep_field: renderer.backend
   sweep_values: [3dgs, pyrender_cad]
   requires_reonboard: true
+  extra_overrides:
+    pyrender_cad:
+      solver.refine_pose: false

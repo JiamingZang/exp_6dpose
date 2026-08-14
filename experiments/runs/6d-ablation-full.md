@@ -156,6 +156,15 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   1/600 帧（0.2%）不同**——择优判据对最终质量影响可忽略；"择优价值=为联合
   解/引导精化提供高质量起点"（论文 §3.6.2）获逐帧证据。预判（21:25
   "weighted 档也 ≈ 49-50"）命中 ✓
+- `08-15 00:30`：**08/03 组首跑崩溃定位与修复**——(1) 08 pyrender_cad 臂崩于
+  PoseEstimator 无条件构造 PoseRefiner 缺 .pt（pyrender onboard 只建 .npz
+  库不训练 3DGS）：load_ablation 新增 extra_overrides（按 sweep 值附加
+  点号路径覆盖），08_renderer.yaml 给 pyrender_cad 臂关 refine_pose（guided
+  不依赖 .pt 保留）; (2) 03 dinov2_patch 崩于 Dinov2PatchMatcher.match 返回
+  3 值而 pipeline.py:786 解包 4 值：补第 4 返回值 top_full=None（无稠密解码，
+  guided 自动跳过）。测试 206 过；批处理脚本追加两修复组重跑（tzdepth 后），
+  全链重排：批结束约 06:30 → duck kcurve → consensus → adaptive-k → fib24。
+  3dgs 臂粗位姿对照由主缓存 R_coarse（抛光前位姿）聚合，免重跑。
 - `08-14 21:25`：**07-similarity 档（缓存聚合）MEAN 49.50**（duck 30.83 /
   ape 47.50 / cat 53.33 / holepuncher 50.83 / phone 65.00）≈ **inlier 49.33
   （几乎逐物体相同）**——**择优判据不敏感**：selection=similarity 的位姿

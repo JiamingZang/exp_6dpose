@@ -95,9 +95,15 @@ def load_ablation(cfg: Dict[str, Any], ablation_path: str):
     field = ab["sweep_field"]
     presets = ab.get("presets", {})
     reonboard = bool(ab.get("requires_reonboard", False))
+    # 单档额外覆盖：extra_overrides: {<sweep 值>: {<点号路径>: <值>, ...}}
+    # （08 renderer 用：pyrender_cad 无 3DGS ckpt，须关 refine_pose）
+    extra = ab.get("extra_overrides", {})
     runs = []
     for v in ab["sweep_values"]:
         value = presets[v] if presets else v
         label = f"{ab['name']}={v}"
-        runs.append((label, apply_override(cfg, field, value), reonboard))
+        run_cfg = apply_override(cfg, field, value)
+        for path, val in extra.get(v, {}).items():
+            run_cfg = apply_override(run_cfg, path, val)
+        runs.append((label, run_cfg, reonboard))
     return ab["name"], runs
