@@ -66,6 +66,7 @@ python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_es_ia.y
 - `08-16 07:00`：cat 采满，仿真：**baseline 42.50 → 52.50（Δ+10.00）@ meanK 1.6**（w=3/rel0.1/min_k=5）；在线配置档（rel0.05/min_k=8）+8.33——**三物体一致（duck +3.33 / ape +7.50 / cat +10.00）**。
 - `08-16 07:20`：hp 采满，仿真：**baseline 34.17 → 35.83（Δ+1.67）@ meanK 3.6-5.1**——**四物体全正**（duck/ape/cat/hp），hp 增益最小（弱纹理最弱物体早停窗口窄）；phone 采集中。
 - `08-16 07:40`：phone 采满（06:48 全采集完成），仿真：**baseline 51.67 → 54.17（Δ+2.50）@ meanK 3.5**——**5/5 全正，MEAN Δ+5.00 @ meanK ~2.7**（K=40 → ~2.7 = 解码降 94%）；成功线（meanK≤20 且 ADD≥基线-1.0）远超。链进入 fib24（onboard 120t + 评测 ~3h）。
+- `08-16 07:10`：**语义澄清（hp 悖论）**：固定前缀重放（原始解码序，含 PnP 失败候选占位）hp 单调上升 14→34、duck 复现 dip——这与官方 K 曲线一致；仿真/在线早停的择优在**有效候选过滤序**上进行（失败候选不占位），plateau 停止是其增益来源，不是任何固定 K。两种语义各自自洽：官方 K 曲线=原始序固定 K；早停=过滤序自适应停止。rank-top1（27.0 均值）< inlier-best（36.0）< 早停（41.0）——排名做排除、内点做前缀内选择，组合才有效。
 - `08-16 06:48`：**链事故 1（fib24 onboard 命令错）**：recovery 链 fib24 段调用 `scripts/data/onboard_object.py`——该路径不存在（AGENTS.md 主链命令过时；真实入口是 `src.pipeline.onboard_object` 函数），5 物体 onboard 全失败 + 评测缺库 → rc=1 链中止，localt_off 未跑。修复：AGENTS.md 主链命令更正；续链 /tmp/post_recovery2.sh（正确 python -c 调用 onboard_object）等 es 验证后补跑 fib24 + localt_off。
 - `08-16 06:50`：**链事故 2（es_cb 闭包未绑定）**：es 粗位姿档首帧崩溃 `NameError: free variable 'sx'`——es_cb 闭包引用 `sx, sy`，但二者由 matcher.match 返回才绑定，回调在返回前被调用。修复 `661c5be`：matcher 回调签名改为 `cb(m, sx, sy)`（内部尺度直接传入）。pytest 214 全绿；重挂 watcher + 续链。帧 1 实测：decoded=8（min_k 地板）、matching 1.46s vs 40 解码 4.38s。
 
