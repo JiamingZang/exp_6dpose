@@ -64,6 +64,7 @@ python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_es_ia.y
 - `08-16 06:30`：**在线配置 Pareto 确认**（w=2/ratio=0.05/min_k=8）：duck +2.50 @ meanK 2.2、ape +7.50 @ meanK 2.5（min_k=8 同时保障联合 PnP 池 ≥8 模板）。
 - `08-16 06:35`：**解码数分布**（在线规则重放）：duck meanK 2.2 p50=1 p90=6 max=9；ape meanK 2.5 p90=6 max=9——82%/72% 帧解码 ≤3，**0% 帧解码 >20（无长尾）**；粗位姿延迟估计 6.1s → ~0.7s（≈9×）。
 - `08-16 07:00`：cat 采满，仿真：**baseline 42.50 → 52.50（Δ+10.00）@ meanK 1.6**（w=3/rel0.1/min_k=5）；在线配置档（rel0.05/min_k=8）+8.33——**三物体一致（duck +3.33 / ape +7.50 / cat +10.00）**。
+- `08-16 07:20`：hp 采满，仿真：**baseline 34.17 → 35.83（Δ+1.67）@ meanK 3.6-5.1**——**四物体全正**（duck/ape/cat/hp），hp 增益最小（弱纹理最弱物体早停窗口窄）；phone 采集中。
 
 ## Result
 
@@ -74,7 +75,7 @@ python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_es_ia.y
 | duck | 27.50 | 30.83 | **+3.33** | 2.9 | w=5, δ=50, min_k=5 |
 | ape | 24.17 | 31.67 | **+7.50** | 2.5 | w=2, rel0.05, min_k=8 |
 | cat | 42.50 | 52.50 | **+10.00** | 1.6 | w=3, rel0.1, min_k=5 |
-| holepuncher | - | - | - | - | 待采集 |
+| holepuncher | 34.17 | 35.83 | **+1.67** | 3.6 | w=5, δ=50, min_k=5 |
 | phone | - | - | - | - | 待采集 |
 
 ### 在线验证（待跑）
