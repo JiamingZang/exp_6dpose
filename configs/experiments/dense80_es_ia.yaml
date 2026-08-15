@@ -1,0 +1,12 @@
+# 在线早停 + champion 级联验证档（6d-adaptive-k-sim 落地，08-16）。
+# base = champion 级联（iter_align 2 轮 + 抛光）；matching.early_stop
+# 只改粗位姿阶段的候选池（解码前缀），下游级联不动。
+# 对比口径：5 弱物体 120 帧 vs champion ia 基线 61.20。
+base: ../current/dense80_depthc_ia.yaml
+
+matching:
+  early_stop: true
+  early_stop_w: 2
+  early_stop_delta: 0
+  early_stop_ratio: 0.05
+  early_stop_min_k: 8

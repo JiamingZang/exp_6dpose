@@ -1,0 +1,13 @@
+# 在线早停验证档（6d-adaptive-k-sim 落地，08-16）。
+# base = 主表配置；matching.early_stop 打开后按解码顺序逐模板解码+PNP，
+# plateau 判定停止（后期"自洽地错"候选不再进入池）。
+# 参数初值取自 duck/ape 仿真共同最优区（rel0.05 跨物体通用）；
+# 全 5 物体仿真 Pareto 出炉后若更优点出现，就地改参数重跑。
+base: ../current/dense80_depthc_guided.yaml
+
+matching:
+  early_stop: true
+  early_stop_w: 2
+  early_stop_delta: 0
+  early_stop_ratio: 0.05
+  early_stop_min_k: 8
