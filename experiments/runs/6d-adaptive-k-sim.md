@@ -61,6 +61,9 @@ python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_es_ia.y
 - `08-16 05:45`：排名分布：duck 有货帧正确候选 top-3 47%/top-5 65%；ape top-3 62%/top-5 70%——机制上限与早停增益一致。
 - `08-16 06:00`：在线早停实现完成并提交（`2c2d81e`）：plateau_step（绝对/相对双阈值）+ matcher 逐模板解码早停模式（独立 NN，与融合互斥）+ pipeline `_pnp_one` 抽取共用 + 配置项（early_stop/w/delta/ratio/min_k）+ 8 个单测（214 全绿）。验证配置 `dense80_es.yaml`（粗位姿档）/`dense80_es_ia.yaml`（champion 级联档）已建（`53179c8` 已 push）。
 - `08-16 06:05`：es_verify_watcher.sh（PID 667072）挂起，等主链退出后自动跑在线验证两档。
+- `08-16 06:30`：**在线配置 Pareto 确认**（w=2/ratio=0.05/min_k=8）：duck +2.50 @ meanK 2.2、ape +7.50 @ meanK 2.5（min_k=8 同时保障联合 PnP 池 ≥8 模板）。
+- `08-16 06:35`：**解码数分布**（在线规则重放）：duck meanK 2.2 p50=1 p90=6 max=9；ape meanK 2.5 p90=6 max=9——82%/72% 帧解码 ≤3，**0% 帧解码 >20（无长尾）**；粗位姿延迟估计 6.1s → ~0.7s（≈9×）。
+- `08-16 07:00`：cat 采满，仿真：**baseline 42.50 → 52.50（Δ+10.00）@ meanK 1.6**（w=3/rel0.1/min_k=5）；在线配置档（rel0.05/min_k=8）+8.33——**三物体一致（duck +3.33 / ape +7.50 / cat +10.00）**。
 
 ## Result
 
@@ -70,7 +73,7 @@ python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_es_ia.y
 |---|---|---:|---:|---:|---|
 | duck | 27.50 | 30.83 | **+3.33** | 2.9 | w=5, δ=50, min_k=5 |
 | ape | 24.17 | 31.67 | **+7.50** | 2.5 | w=2, rel0.05, min_k=8 |
-| cat | - | - | - | - | 待采集 |
+| cat | 42.50 | 52.50 | **+10.00** | 1.6 | w=3, rel0.1, min_k=5 |
 | holepuncher | - | - | - | - | 待采集 |
 | phone | - | - | - | - | 待采集 |
 
