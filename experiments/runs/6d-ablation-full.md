@@ -156,6 +156,10 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   1/600 帧（0.2%）不同**——择优判据对最终质量影响可忽略；"择优价值=为联合
   解/引导精化提供高质量起点"（论文 §3.6.2）获逐帧证据。预判（21:25
   "weighted 档也 ≈ 49-50"）命中 ✓
+- `08-15 11:15`：**consensus_best 纯逻辑冒烟**（合成位姿三场景）：正确簇
+  胜出（忽略孤立高内点错误解 ✓）、无簇保守 None ✓、双等大簇时取先遇簇
+  （设计局限：若"自洽地错"解也成簇——多模板收敛到同一错误位姿——共识
+  无法区分，与"自洽地错"90.5% 统计互斥性待实测）。
 - `08-15 11:00`：**链 1 失败诊断与修复（08-14 遗留三步全失败但 DONE 盲 touch）**：
   (1) consensus 崩于 rank_candidates 无 consensus 策略（ValueError 拦截在
   pipeline 的 consensus_best 分支之前）——selection.py 补直通（排序兜底，
