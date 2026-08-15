@@ -156,6 +156,25 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   1/600 帧（0.2%）不同**——择优判据对最终质量影响可忽略；"择优价值=为联合
   解/引导精化提供高质量起点"（论文 §3.6.2）获逐帧证据。预判（21:25
   "weighted 档也 ≈ 49-50"）命中 ✓
+- `08-16 01:00`：**ia_gateoff 结案（iter_align 接受门关闭）MEAN 57.33**
+  （duck 47.50 / ape 57.50 / cat 64.17 / hp 40.00 / phone 77.50）vs 冠军
+  （门开启）61.20（-3.87）——**接受门贡献集中 holepuncher +15.83**（无条件
+  应用迭代会毁掉位姿，门起保护），duck/phone 中性（迭代少回退）；论文
+  §4.2"对齐损失单调保证"获消融证据。注：chain2 的 --out 误传目录导致
+  results 写盘崩溃（rc=0 误报），数字取自缓存。
+- `08-16 00:50`：**watchdog 事故处置**——00:39 watchdog 误判"批处理结束+无
+  run_ablation.py"（localt_off 用 run_linemod.py 不触发其守卫）重复拉起
+  duck_kcurve_verify + post_consensus_chain：K 曲线重复跑与共识并发致
+  CUDA OOM 死亡（已核验的 K 曲线缓存被删，但数字已入记录与合并
+  ablation_topk.json，无需重跑）；chain2 在 ia_gateoff 后因 --out 目录错误
+  提前收尾（localt_off 漏跑）。已杀 watchdog + 重复链；恢复链
+  （/tmp/post_recovery.sh）重建：consensus → adaptive-k → sim → fib24 →
+  localt_off，严格 rc 检查，约 08:00 全完。
+- `08-15 23:00`：**consensus 实验预测登记**：择优判据不敏感（1/600 帧）
+  提示 consensus 相对 inlier 预期 ±1-2；但 gap-oracle 分型中 duck/cat 属
+  "池有货但选择倒挂"（-17.5/-6.7）——若位姿聚类能避开自洽错误模板，
+  duck/cat 有望 +3 以上；ape/phone/hp 池没货，预期持平（保守门控设计）。
+  实测约 02:30 出。
 - `08-15 21:40`：**11_joint 全档定稿（官方 ablation_joint_templates.json）**：
   J=1 45.33 / J=5 49.33 / J=10 46.00 / J=20 45.83（默认 J=12 参照 49.33）——
   **J 曲线双峰形态（J∈{5,12} 并列最高，J∈{10,20} 低点）**：联合 PnP 增益
