@@ -156,6 +156,13 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   1/600 帧（0.2%）不同**——择优判据对最终质量影响可忽略；"择优价值=为联合
   解/引导精化提供高质量起点"（论文 §3.6.2）获逐帧证据。预判（21:25
   "weighted 档也 ≈ 49-50"）命中 ✓
+- `08-16 04:00`：**consensus 结案 MEAN 49.00**（duck 30.83 / ape 44.17 /
+  cat 57.50 / hp 47.50 / phone 65.00）vs inlier 49.33（**-0.33 判平**）——
+  **cat +4.17 预测命中**（"选择倒挂"帧被位姿聚类救回），但 ape -2.50 /
+  hp -3.33（consensus 替换偶尔劣于 inlier 选择）、duck/phone 持平；保守门控
+  （无簇不换）未能完全保护 ape/hp。与"择优判据不敏感"主题一致：consensus
+  作为第四档也落在 ±1 噪声带内；位姿聚类对特定"选择倒挂"物体（cat）有效
+  但不具泛化性。论文 §3.6.2/§5.3.3 补 consensus 档。
 - `08-16 01:00`：**ia_gateoff 结案（iter_align 接受门关闭）MEAN 57.33**
   （duck 47.50 / ape 57.50 / cat 64.17 / hp 40.00 / phone 77.50）vs 冠军
   （门开启）61.20（-3.87）——**接受门贡献集中 holepuncher +15.83**（无条件
