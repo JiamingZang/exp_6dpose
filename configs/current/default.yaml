@@ -124,6 +124,20 @@ matching:
   #          见 VERIFICATION.md §8.3）
   template_prescreen: dinov2   # dinov2 | none
   top_k: 40                    # Top-K 候选模板数（40=全模板；只决定候选数）
+  # 自适应候选早停（6d-adaptive-k-sim 落地，§5.4）：按解码顺序逐模板
+  # 解码+PNP，连续 early_stop_w 个模板内点无增益（≤ early_stop_delta）
+  # 且已解码 early_stop_min_k 个即停止。机制：正确模板通常排前几位但
+  # 内点反而不如后期"自洽地错"模板（内点虚高，K 曲线 dip 根源），
+  # 早停把后期坏候选排除在候选池外——精度持平/升且解码数降 ~90%。
+  # 仅 template_ranking=dinov2 可用；开启时用逐模板独立 NN（与融合互斥，
+  # 小池下融合≈独立）。参数从离线仿真 Pareto 选点（scripts/analysis/
+  # simulate_adaptive_k.py）。
+  early_stop: false           # false | true
+  early_stop_w: 3             # 停滞窗口（连续无增益模板数）
+  early_stop_delta: 50        # 内点增益阈值（绝对；0 = 任何改善即不算停滞）
+  early_stop_ratio: 0.0       # 相对增益阈值（>0 时替代绝对 delta：
+                              # inl > best·(1+ratio)，跨物体通用）
+  early_stop_min_k: 5         # 最小解码数兜底
   # 2D-3D 提升路线：
   #   coord_map（默认）= alpha 混合 3D 坐标图查表
   #   depth_backproject = 模板深度图 K_inv 反投影 + 位姿逆变换（历史对照，

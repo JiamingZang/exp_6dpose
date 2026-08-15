@@ -116,6 +116,26 @@ def resolve_prefilter_order(prescreen: str, template_ranking: str,
     return None
 
 
+def plateau_step(best_inl: float, stall: int, decoded: int,
+                 inl: Optional[float], w: int, delta: int, min_k: int,
+                 ratio: float = 0.0) -> Tuple[float, int, bool]:
+    """在线早停单步判定（6d-adaptive-k-sim 落地，语义与仿真一一对应）。
+
+    inl=None（PnP 失败/无匹配）计一次停滞。改善判据二选一：
+    ratio>0 用相对阈值（inl > best·(1+ratio)，跨物体通用），否则用
+    绝对阈值（inl > best + delta）。返回 (best_inl, stall, stop)。
+    """
+    if inl is not None:
+        if ratio > 0.0:
+            improved = inl > best_inl * (1.0 + ratio)
+        else:
+            improved = inl > best_inl + delta
+        if improved:
+            return float(inl), 0, False
+    stall += 1
+    return best_inl, stall, (decoded >= min_k and stall >= w)
+
+
 class Mast3rMatcher:
     """MASt3R 匹配器：模板编码缓存 + 批量成对解码 + GPU 互最近邻。"""
 
@@ -246,11 +266,134 @@ class Mast3rMatcher:
                    res1["pts3d"][bi], res2["pts3d"][bi],
                    res1["desc_conf"][bi], res2["desc_conf"][bi])
 
+    def _absorb_decode(self, i: int, desc_q, desc_t, pts3d_q, pts3d_t,
+                       conf_q, conf_t, flat_q_score, flat_q_full,
+                       scores: np.ndarray, desc_cache: Dict, top_full,
+                       is_top1: bool):
+        """把单模板解码结果落盘（sim 打分 + desc 缓存 + top_full 记录）。
+
+        match() 的批量解码循环与在线早停的单模板循环共用（同一物理量
+        一处实现）。返回 (top_full, absorbed)：absorbed=False 表示模板
+        前景为空、未产生 desc 缓存（不计入已解码数）。
+        """
+        torch = self.torch
+        dq = desc_q.reshape(-1, desc_q.shape[-1])
+        fg_t = self._tmpl_fg[i]
+        tys, txs = np.nonzero(fg_t)
+        if len(tys) == 0:
+            return top_full, False
+        flat_t = torch.tensor(tys * fg_t.shape[1] + txs, device=self.device)
+        dt = desc_t.reshape(-1, desc_t.shape[-1])[flat_t]   # (Nt,24)
+        # sim(m) = mean_y max_{y'} S(y,y')
+        sim_sub = dq[flat_q_score] @ dt.T
+        scores[i] = float(sim_sub.max(dim=1).values.mean())
+        # 前景像素的相机系 3D（几何一致性过滤用；只取 fg，省内存）
+        p3_q = pts3d_q.reshape(-1, 3)[flat_q_full].float().cpu().numpy()
+        p3_t = pts3d_t.reshape(-1, 3)[flat_t].float().cpu().numpy()
+        pix_t_native = np.stack([txs, tys], axis=1) * self._tmpl_scale
+        desc_cache[i] = (
+            dq[flat_q_full].half().cpu(), dt.half().cpu(),
+            pix_t_native, p3_q, p3_t,
+            conf_q.reshape(-1)[flat_q_full].float().cpu().numpy(),
+            conf_t.reshape(-1)[flat_t].float().cpu().numpy())
+        if is_top1:
+            top_full = (int(i),
+                        desc_q.float().cpu().numpy().astype(np.float16),
+                        dt.half().cpu().numpy(),
+                        pix_t_native.copy())
+        return top_full, True
+
+    def _match_one_template(self, i: int, desc_entry, pix_q_all: np.ndarray,
+                            scores: np.ndarray, sim_threshold: float,
+                            cycle_tau_px: float, n_sample: int, rng
+                            ) -> TemplateMatch:
+        """单模板：稠密互最近邻 + cycle 过滤 + 阈值/置信度过滤 + 采样。
+
+        与 match() 非融合路径逐字节同语义（在线早停模式逐模板复用；
+        抽取后两处同一实现，改动不会分叉）。
+        """
+        torch = self.torch
+        geom_on = bool(self.cfg.get("geom_filter", True))
+        geom_tau = float(self.cfg.get("geom_tau_frac", 0.08))
+        geom_iters = int(self.cfg.get("geom_iters", 120))
+        dq_fg, dt_fg, pix_t, p3_q, p3_t, conf_q, conf_t = desc_entry
+        dq_fg = dq_fg.to(self.device).float()
+        dt_fg = dt_fg.to(self.device).float()
+        # 稠密互最近邻：相似度矩阵按查询侧分块算，避免一次性建
+        # (Nq, Nt) 全矩阵（ape 大特写帧可达 ~70 亿元素 ≈ 29GB，OOM）。
+        # 列 argmax 用严格大于才更新，保留最先出现的行（等价全量
+        # argmax 的最小索引语义）。
+        chunk = 4096
+        nn_q2t = torch.empty(len(dq_fg), dtype=torch.long,
+                             device=self.device)
+        sims_fwd = torch.empty(len(dq_fg), dtype=torch.float32,
+                               device=self.device)
+        best_col = torch.full((len(dt_fg),), float("-inf"),
+                              device=self.device)
+        nn_t2q = torch.zeros(len(dt_fg), dtype=torch.long,
+                             device=self.device)
+        for c0 in range(0, len(dq_fg), chunk):
+            sim_c = dq_fg[c0:c0 + chunk] @ dt_fg.T   # (chunk, Nt)
+            nn_c = sim_c.argmax(dim=1)
+            nn_q2t[c0:c0 + chunk] = nn_c
+            sims_fwd[c0:c0 + chunk] = sim_c.gather(1, nn_c[:, None])[:, 0]
+            col_max, col_idx = sim_c.max(dim=0)
+            upd = col_max > best_col
+            best_col[upd] = col_max[upd]
+            nn_t2q[upd] = col_idx[upd] + c0
+            del sim_c
+        nn_q2t = nn_q2t.cpu().numpy()
+        nn_t2q = nn_t2q.cpu().numpy()
+        sims_fwd = sims_fwd.cpu().numpy()
+
+        idx_q = np.arange(len(pix_q_all))
+        # 共享纯逻辑：cycle consistency（τ px，互最近邻为其 τ=0 特例）
+        keep = cycle_consistency_filter(
+            pix_q_all.astype(np.float64), idx_q, nn_q2t, nn_t2q,
+            tau_px=cycle_tau_px)
+        if geom_on and len(nn_q2t) > 0:
+            # MASt3R 两视图 3D 一致性过滤（官方 fast_nn 几何验证步）：
+            # desc 最近邻在重复纹理下会找错同名点，cycle 同样失效；
+            # 用 RANSAC-相似变换按 3D 残差滤掉几何不一致的对应
+            from .correspondence import geometric_consistency_filter
+            keep = keep & geometric_consistency_filter(
+                p3_q, p3_t, nn_q2t, sims_fwd, rng,
+                tau_obj_frac=geom_tau, ransac_iters=geom_iters)
+        ok = keep & (sims_fwd > sim_threshold)     # 相似度阈值过滤
+        conf_tau_q = float(self.cfg.get("conf_tau_q",
+                                         self.cfg.get("conf_tau", 0.0)))
+        conf_tau_t = float(self.cfg.get("conf_tau_t",
+                                         self.cfg.get("conf_tau", 0.0)))
+        if conf_tau_q > 0:
+            # desc 置信度过滤（查询侧；探针 10/10 帧好/坏对应分离）
+            ok = ok & (conf_q[idx_q] > conf_tau_q)
+        if conf_tau_t > 0:
+            # 模板侧单独阈值：合成渲染图 conf 系统性低（p95≈0.6）
+            ok = ok & (conf_t[nn_q2t] > conf_tau_t)
+        iq = idx_q[ok]
+        it = nn_q2t[ok]
+        if p3_q is not None:
+            p2, p3, ss, p3q = sample_correspondences(
+                pix_q_all[iq].astype(np.float64),
+                pix_t[it].astype(np.float64), sims_fwd[ok],
+                n_sample=n_sample, rng=rng,
+                extras=[p3_q[iq]])
+        else:
+            p2, p3, ss = sample_correspondences(
+                pix_q_all[iq].astype(np.float64),
+                pix_t[it].astype(np.float64), sims_fwd[ok],
+                n_sample=n_sample, rng=rng)
+            p3q = None
+        return TemplateMatch(
+            template_idx=int(i), score=float(scores[i]),
+            pix_q=p2, pix_t=p3, sims=ss, pts3d_q=p3q)
+
     # ------------------------------------------------------------------
     def match(self, query_crop_u8: np.ndarray, query_mask_crop: np.ndarray,
               top_k: int, sim_threshold: float, cycle_tau_px: float,
               n_sample: int, rng: Optional[np.random.Generator] = None,
-              prefilter_order: Optional[np.ndarray] = None
+              prefilter_order: Optional[np.ndarray] = None,
+              per_template_cb=None
               ) -> Tuple[List[TemplateMatch], Tuple[float, float], np.ndarray]:
         """查询裁剪区 vs 模板：打分 → Top-K → 稠密对应。
 
@@ -258,6 +401,11 @@ class Mast3rMatcher:
             prefilter_order: DINOv2 相似度降序模板下标。给定时
                 只解码前 top_k 个模板（template_ranking=dinov2）；为 None 时
                 解码全部模板再按 sim(m) 选 Top-K（template_ranking=mast3r）。
+            per_template_cb: 在线早停回调（6d-adaptive-k-sim）。给定时
+                进入早停模式：逐模板解码 → 独立 NN 匹配 → 回调（管线侧
+                跑 RANSAC-PnP 返回内点数）→ plateau 判定停止。回调签名
+                cb(match: TemplateMatch) -> Optional[float]；返回的 matches
+                只含已解码前缀，顺序即解码顺序。
 
         Returns:
             matches: Top-K 模板的 TemplateMatch 列表（降序）
@@ -302,6 +450,46 @@ class Mast3rMatcher:
         decode_idxs = decode_template_indices(
             n_tmpl, top_k, prefilter_order, decode_k=decode_k)
 
+        # ---- 在线早停（6d-adaptive-k-sim 落地）：逐模板解码 → 独立 NN
+        # 匹配 → 回调（管线内 PnP 返回内点）→ plateau 判定。融合匹配与
+        # 早停互斥：融合池需要最终解码集，而早停判定必须在解码过程中
+        # 做——早停模式用逐模板独立 NN（小池下融合 ≈ 独立，sim 语义一致）。
+        if per_template_cb is not None:
+            es_w = int(self.cfg.get("early_stop_w", 3))
+            es_delta = int(self.cfg.get("early_stop_delta", 50))
+            es_ratio = float(self.cfg.get("early_stop_ratio", 0.0))
+            es_min_k = int(self.cfg.get("early_stop_min_k", 5))
+            best_inl = -1.0
+            stall = 0
+            decoded = 0
+            top_full = None
+            matches: List[TemplateMatch] = []
+            for i in decode_idxs:
+                i = int(i)
+                for _i, desc_q, desc_t, pts3d_q, pts3d_t, conf_q, conf_t in \
+                        self._decode_batch(fq, pq, sq, [i]):
+                    top_full, absorbed = self._absorb_decode(
+                        i, desc_q, desc_t, pts3d_q, pts3d_t, conf_q, conf_t,
+                        flat_q_score, flat_q_full, scores, desc_cache,
+                        top_full, is_top1=(prefilter_order is not None
+                                           and i == int(decode_idxs[0])))
+                    if not absorbed:
+                        continue
+                    decoded += 1
+                    m = self._match_one_template(
+                        i, desc_cache[i], pix_q_all, scores, sim_threshold,
+                        cycle_tau_px, n_sample, rng)
+                    matches.append(m)
+                    inl = per_template_cb(m)
+                    best_inl, stall, stop = plateau_step(
+                        best_inl, stall, decoded, inl,
+                        w=es_w, delta=es_delta, min_k=es_min_k,
+                        ratio=es_ratio)
+                    if stop:
+                        return matches, (sx, sy), scores, top_full
+                    del desc_q, desc_t
+            return matches, (sx, sy), scores, top_full
+
         # ---- 第一遍：待解码模板批量解码 + 打分，desc 暂存 CPU fp16 ----
         # 记录 top1 模板的稠密 desc（查询全图 + 模板前景），供 solve 阶段
         # 引导式对应精化（粗位姿投影 → 局部窗口重匹配）复用，避免重解码
@@ -310,37 +498,16 @@ class Mast3rMatcher:
             idxs = decode_idxs[start:start + self.batch_size]
             for i, desc_q, desc_t, pts3d_q, pts3d_t, conf_q, conf_t in \
                     self._decode_batch(fq, pq, sq, idxs):
-                dq = desc_q.reshape(-1, desc_q.shape[-1])
-                fg_t = self._tmpl_fg[i]
-                tys, txs = np.nonzero(fg_t)
-                if len(tys) == 0:
-                    continue
-                flat_t = torch.tensor(tys * fg_t.shape[1] + txs,
-                                      device=self.device)
-                dt = desc_t.reshape(-1, desc_t.shape[-1])[flat_t]   # (Nt,24)
-                # sim(m) = mean_y max_{y'} S(y,y')
-                sim_sub = dq[flat_q_score] @ dt.T
-                scores[i] = float(sim_sub.max(dim=1).values.mean())
-                # 前景像素的相机系 3D（几何一致性过滤用；只取 fg，省内存）
-                p3_q = pts3d_q.reshape(-1, 3)[flat_q_full].float().cpu().numpy()
-                p3_t = pts3d_t.reshape(-1, 3)[flat_t].float().cpu().numpy()
-                pix_t_native = np.stack([txs, tys], axis=1) * self._tmpl_scale
-                desc_cache[i] = (
-                    dq[flat_q_full].half().cpu(), dt.half().cpu(),
-                    pix_t_native, p3_q, p3_t,
-                    conf_q.reshape(-1)[flat_q_full].float().cpu().numpy(),
-                    conf_t.reshape(-1)[flat_t].float().cpu().numpy())
                 if prefilter_order is not None:
-                    is_top = (i == int(decode_idxs[0]))
+                    is_top1 = (i == int(decode_idxs[0]))
                 else:
-                    is_top = (top_full is None
-                              or scores[i] > scores[top_full[0]])
-                if is_top:
-                    top_full = (int(i),
-                                desc_q.float().cpu().numpy().astype(np.float16),
-                                dt.half().cpu().numpy(),
-                                pix_t_native.copy())
-                del desc_q, desc_t, dq, dt, sim_sub, p3_q, p3_t
+                    is_top1 = (top_full is None
+                               or scores[i] > scores[top_full[0]])
+                top_full, _ = self._absorb_decode(
+                    i, desc_q, desc_t, pts3d_q, pts3d_t, conf_q, conf_t,
+                    flat_q_score, flat_q_full, scores, desc_cache, top_full,
+                    is_top1=is_top1)
+                del desc_q, desc_t
 
         # ---- 第二遍：Top-K 稠密互最近邻 + cycle 过滤 + 阈值 + 采样 ----
         if prefilter_order is not None and decode_k <= top_k:
@@ -350,9 +517,6 @@ class Mast3rMatcher:
             # 全解码（prefilter_order=None）或两阶段预筛（decode_k > top_k）：
             # 在已解码集合上按 MASt3R sim(m) 取 Top-K
             order = np.argsort(-scores)[:min(top_k, n_tmpl)]
-        geom_on = bool(self.cfg.get("geom_filter", True))
-        geom_tau = float(self.cfg.get("geom_tau_frac", 0.08))
-        geom_iters = int(self.cfg.get("geom_iters", 120))
         sel = [int(i) for i in order
                if np.isfinite(scores[i]) and i in desc_cache]
         matches = []
@@ -445,75 +609,7 @@ class Mast3rMatcher:
             i = int(i)
             if not np.isfinite(scores[i]) or i not in desc_cache:
                 continue
-            dq_fg, dt_fg, pix_t, p3_q, p3_t, conf_q, conf_t = desc_cache[i]
-            dq_fg = dq_fg.to(self.device).float()
-            dt_fg = dt_fg.to(self.device).float()
-            # 稠密互最近邻：相似度矩阵按查询侧分块算，避免一次性建
-            # (Nq, Nt) 全矩阵（ape 大特写帧可达 ~70 亿元素 ≈ 29GB，OOM）。
-            # 列 argmax 用严格大于才更新，保留最先出现的行（等价全量
-            # argmax 的最小索引语义）。
-            chunk = 4096
-            nn_q2t = torch.empty(len(dq_fg), dtype=torch.long,
-                                 device=self.device)
-            sims_fwd = torch.empty(len(dq_fg), dtype=torch.float32,
-                                   device=self.device)
-            best_col = torch.full((len(dt_fg),), float("-inf"),
-                                  device=self.device)
-            nn_t2q = torch.zeros(len(dt_fg), dtype=torch.long,
-                                 device=self.device)
-            for c0 in range(0, len(dq_fg), chunk):
-                sim_c = dq_fg[c0:c0 + chunk] @ dt_fg.T   # (chunk, Nt)
-                nn_c = sim_c.argmax(dim=1)
-                nn_q2t[c0:c0 + chunk] = nn_c
-                sims_fwd[c0:c0 + chunk] = sim_c.gather(1, nn_c[:, None])[:, 0]
-                col_max, col_idx = sim_c.max(dim=0)
-                upd = col_max > best_col
-                best_col[upd] = col_max[upd]
-                nn_t2q[upd] = col_idx[upd] + c0
-                del sim_c
-            nn_q2t = nn_q2t.cpu().numpy()
-            nn_t2q = nn_t2q.cpu().numpy()
-            sims_fwd = sims_fwd.cpu().numpy()
-
-            idx_q = np.arange(len(pix_q_all))
-            # 共享纯逻辑：cycle consistency（τ px，互最近邻为其 τ=0 特例）
-            keep = cycle_consistency_filter(
-                pix_q_all.astype(np.float64), idx_q, nn_q2t, nn_t2q,
-                tau_px=cycle_tau_px)
-            if geom_on and len(nn_q2t) > 0:
-                # MASt3R 两视图 3D 一致性过滤（官方 fast_nn 几何验证步）：
-                # desc 最近邻在重复纹理下会找错同名点，cycle 同样失效；
-                # 用 RANSAC-相似变换按 3D 残差滤掉几何不一致的对应
-                from .correspondence import geometric_consistency_filter
-                keep = keep & geometric_consistency_filter(
-                    p3_q, p3_t, nn_q2t, sims_fwd, rng,
-                    tau_obj_frac=geom_tau, ransac_iters=geom_iters)
-            ok = keep & (sims_fwd > sim_threshold)     # 相似度阈值过滤
-            conf_tau_q = float(self.cfg.get("conf_tau_q",
-                                             self.cfg.get("conf_tau", 0.0)))
-            conf_tau_t = float(self.cfg.get("conf_tau_t",
-                                             self.cfg.get("conf_tau", 0.0)))
-            if conf_tau_q > 0:
-                # desc 置信度过滤（查询侧；探针 10/10 帧好/坏对应分离）
-                ok = ok & (conf_q[idx_q] > conf_tau_q)
-            if conf_tau_t > 0:
-                # 模板侧单独阈值：合成渲染图 conf 系统性低（p95≈0.6）
-                ok = ok & (conf_t[nn_q2t] > conf_tau_t)
-            iq = idx_q[ok]
-            it = nn_q2t[ok]
-            if p3_q is not None:
-                p2, p3, ss, p3q = sample_correspondences(
-                    pix_q_all[iq].astype(np.float64),
-                    pix_t[it].astype(np.float64), sims_fwd[ok],
-                    n_sample=n_sample, rng=rng,
-                    extras=[p3_q[iq]])
-            else:
-                p2, p3, ss = sample_correspondences(
-                    pix_q_all[iq].astype(np.float64),
-                    pix_t[it].astype(np.float64), sims_fwd[ok],
-                    n_sample=n_sample, rng=rng)
-                p3q = None
-            matches.append(TemplateMatch(
-                template_idx=int(i), score=float(scores[i]),
-                pix_q=p2, pix_t=p3, sims=ss, pts3d_q=p3q))
+            matches.append(self._match_one_template(
+                i, desc_cache[i], pix_q_all, scores, sim_threshold,
+                cycle_tau_px, n_sample, rng))
         return matches, (sx, sy), scores, top_full

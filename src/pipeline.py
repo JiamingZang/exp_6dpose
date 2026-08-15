@@ -783,14 +783,45 @@ class PoseEstimator:
             prefilter_order = mmr_reorder(
                 prefilter_order, loc.template_sims,
                 self.bank.dino_feats, int(m_cfg.get("top_k", 40)), mmr_lam)
+        # 在线早停（6d-adaptive-k-sim 落地）：逐模板解码 → 回调跑 PnP 返回
+        # 内点 → matcher 内 plateau 判定停止。候选池只含已解码前缀，后期
+        # "自洽地错"模板（内点虚高）不会进入择优（K 曲线 dip 的机制根源）。
+        # 仅 dinov2 预筛路径可用（解码顺序先验已知）；mast3r 全解码排序的
+        # 顺序在打分后才知，无法早停。
+        es_state = None
+        es_cb = None
+        if bool(m_cfg.get("early_stop", False)):
+            if prefilter_order is None:
+                raise ValueError(
+                    "matching.early_stop=true 需要 template_ranking=dinov2 "
+                    "（解码顺序先验）；template_ranking=mast3r 的排序在打分"
+                    "之后才知道，无法早停。请改用 dinov2 或关闭 early_stop")
+            es_state = {"results": [], "corr_list": []}
+            es_t0 = time.time()
+            _es_pnp_time = {"t": 0.0}
+
+            def es_cb(m):
+                t0 = time.time()
+                r = self._pnp_one(
+                    m, {"crop_box_used": crop_box_used,
+                        "s_leg": (s_leg_x, s_leg_y),
+                        "sxy": (sx, sy), "crop": crop},
+                    K_query, es_state["corr_list"], es_state["results"])
+                _es_pnp_time["t"] += time.time() - t0
+                return r.n_inliers if r is not None and r.success else None
+
         matches, (sx, sy), _scores, top_full = self.matcher.match(
             crop, mask_crop,
             top_k=int(m_cfg.get("top_k", 40)),
             sim_threshold=float(m_cfg.get("sim_threshold", 0.3)),
             cycle_tau_px=float(m_cfg.get("cycle_tau_px", 5.0)),
             n_sample=int(m_cfg.get("n_sample_corr", 4096)),
-            rng=self.rng, prefilter_order=prefilter_order)
+            rng=self.rng, prefilter_order=prefilter_order,
+            per_template_cb=es_cb)
         timings["matching"] = time.time() - t0
+        if es_state is not None:
+            timings["es_pnp"] = _es_pnp_time["t"]
+            timings["es_n_decoded"] = float(len(es_state["results"]))
         # top1 模板的稠密 desc（引导式对应精化用，solve 阶段复用）
         top_desc = {"template_idx": top_full[0], "desc_q": top_full[1],
                     "desc_t": top_full[2], "pix_t": top_full[3],
@@ -850,11 +881,78 @@ class PoseEstimator:
                 "top_desc": top_desc,
                 "alts": alts, "timings": timings,
                 "depth_img": depth_img,
+                "es_pnp": es_state,
                 "decode_order": (
                     list(prefilter_order[:int(m_cfg.get("top_k", 40))])
                     if prefilter_order is not None else None)}
 
     # ------------------------------------------------------------------
+    def _pnp_one(self, m, ex: Dict, K_query: np.ndarray,
+                 corr_list: List, results: List):
+        """单模板：像素反变换 → 3D 锚点提升 → RANSAC-PnP。
+
+        _solve_pnp 逐模板循环与在线早停回调共用（同一物理量一处实现）。
+        修改 ransac 参数只动这里。corr_list/results 由调用方持有并累加。
+        """
+        s_cfg = self.cfg["solver"]
+        m_cfg = self.cfg["matching"]
+        crop_box_used = ex["crop_box_used"]
+        s_leg_x, s_leg_y = ex["s_leg"]
+        sx, sy = ex["sxy"]
+        # 查询像素反变换：MASt3R 匹配区 → 裁剪区 → 原图坐标。
+        # tight_square 时总缩放 = 匹配 resize × 方形裁剪 resize 的复合
+        pts2d = back_to_original_pixels(
+            m.pix_q, (sx * s_leg_x, sy * s_leg_y), crop_box_used)
+        # 模板像素 → 3D 锚点（两条路线）
+        if self._lifting == "depth_backproject":
+            # 历史对照口径：深度图 K_inv 反投影 → 位姿逆变换到模型系
+            # （见 depth_lifting.py）
+            from .matching.depth_lifting import backproject_depth_to_model
+            pts3d, valid = backproject_depth_to_model(
+                m.pix_t, self.bank.depth_maps[m.template_idx],
+                self.bank.K, self.bank.poses[m.template_idx],
+                depth_max=m_cfg.get("depth_max"))
+        else:
+            # 默认：坐标图查表 P = Φ_i(y'*)
+            cm = self.bank.coord_maps[m.template_idx]
+            xt = m.pix_t[:, 0].astype(int)
+            yt = m.pix_t[:, 1].astype(int)
+            pts3d = cm[yt, xt]
+            # 坐标图无效像素（背景/alpha 过低置 0）剔除
+            valid = np.abs(pts3d).sum(axis=1) > 0
+        corr_list.append((pts2d[valid], pts3d[valid],
+                          m.pix_t[valid], m.pix_q[valid],
+                          self.bank.images[m.template_idx]
+                          if self.bank.images is not None else None))
+        # 查询侧 3D（MASt3R 成对重建，查询相机系）：有则做深度一致性
+        # 内点判定（深度+重投影双条件），把 5px 阈值内的错误对应按
+        # 3D 深度结构剔除，收紧 tz/rot 条件数（solver.depth_consistency）
+        p3q = getattr(m, "pts3d_q", None)
+        p3q_ok = (p3q is not None and len(p3q) == len(pts3d)
+                  and bool(s_cfg.get("depth_consistency", False)))
+        r = ransac_pnp(
+            pts2d[valid], pts3d[valid], K_query,
+            reproj_px=float(s_cfg.get("ransac_reproj_px", 5.0)),
+            confidence=float(s_cfg.get("ransac_confidence", 0.999)),
+            iterations=int(s_cfg.get("ransac_iterations", 1000)),
+            refine_lm=bool(s_cfg.get("refine_lm", True)),
+            min_correspondences=int(s_cfg.get("min_correspondences", 6)),
+            flag=str(s_cfg.get("pnp_flag", "epnp")),
+            sym_transforms=self._sym_T or None,
+            pts3d_q=p3q[valid] if p3q_ok else None,
+            depth_tau_frac=float(s_cfg.get("depth_tau_frac", 0.05)),
+            pix_t=m.pix_t[valid],
+            pix_q_match=m.pix_q[valid],
+            pix_scale=(float(sx * s_leg_x), float(sy * s_leg_y)),
+            q_img=ex.get("crop"),
+            t_img=self.bank.images[m.template_idx]
+            if self.bank.images is not None else None,
+            subpixel_px=float(s_cfg.get("subpixel_px", 0.0)))
+        r.template_idx = m.template_idx
+        r.template_score = m.score
+        results.append(r)
+        return r
+
     def _solve_pnp(self, ex: Dict, K_query: np.ndarray):
         """逐模板 RANSAC-PnP → 择优 → 联合 PnP 精化。
 
@@ -877,63 +975,19 @@ class PoseEstimator:
         sx, sy = ex["sxy"]
 
         # ---- 步骤 8：逐模板 RANSAC-PnP ----
-        results: List[PnPResult] = []
-        # 逐模板 (pts2d, pts3d, pix_t_valid, pix_q_match_valid, tpl_img)，
-        # 联合 PnP 精化与 NCC 亚像素分组复用
-        corr_list = []
-        for m in matches:
-            # 查询像素反变换：MASt3R 匹配区 → 裁剪区 → 原图坐标。
-            # tight_square 时总缩放 = 匹配 resize × 方形裁剪 resize 的复合
-            pts2d = back_to_original_pixels(
-                m.pix_q, (sx * s_leg_x, sy * s_leg_y), crop_box_used)
-            # 模板像素 → 3D 锚点（两条路线）
-            if self._lifting == "depth_backproject":
-                # 历史对照口径：深度图 K_inv 反投影 → 位姿逆变换到模型系
-                # （见 depth_lifting.py）
-                from .matching.depth_lifting import backproject_depth_to_model
-                pts3d, valid = backproject_depth_to_model(
-                    m.pix_t, self.bank.depth_maps[m.template_idx],
-                    self.bank.K, self.bank.poses[m.template_idx],
-                    depth_max=m_cfg.get("depth_max"))
-            else:
-                # 默认：坐标图查表 P = Φ_i(y'*)
-                cm = self.bank.coord_maps[m.template_idx]
-                xt = m.pix_t[:, 0].astype(int)
-                yt = m.pix_t[:, 1].astype(int)
-                pts3d = cm[yt, xt]
-                # 坐标图无效像素（背景/alpha 过低置 0）剔除
-                valid = np.abs(pts3d).sum(axis=1) > 0
-            corr_list.append((pts2d[valid], pts3d[valid],
-                              m.pix_t[valid], m.pix_q[valid],
-                              self.bank.images[m.template_idx]
-                              if self.bank.images is not None else None))
-            # 查询侧 3D（MASt3R 成对重建，查询相机系）：有则做深度一致性
-            # 内点判定（深度+重投影双条件），把 5px 阈值内的错误对应按
-            # 3D 深度结构剔除，收紧 tz/rot 条件数（solver.depth_consistency）
-            p3q = getattr(m, "pts3d_q", None)
-            p3q_ok = (p3q is not None and len(p3q) == len(pts3d)
-                      and bool(s_cfg.get("depth_consistency", False)))
-            r = ransac_pnp(
-                pts2d[valid], pts3d[valid], K_query,
-                reproj_px=float(s_cfg.get("ransac_reproj_px", 5.0)),
-                confidence=float(s_cfg.get("ransac_confidence", 0.999)),
-                iterations=int(s_cfg.get("ransac_iterations", 1000)),
-                refine_lm=bool(s_cfg.get("refine_lm", True)),
-                min_correspondences=int(s_cfg.get("min_correspondences", 6)),
-                flag=str(s_cfg.get("pnp_flag", "epnp")),
-                sym_transforms=self._sym_T or None,
-                pts3d_q=p3q[valid] if p3q_ok else None,
-                depth_tau_frac=float(s_cfg.get("depth_tau_frac", 0.05)),
-                pix_t=m.pix_t[valid],
-                pix_q_match=m.pix_q[valid],
-                pix_scale=(float(sx * s_leg_x), float(sy * s_leg_y)),
-                q_img=ex.get("crop"),
-                t_img=self.bank.images[m.template_idx]
-                if self.bank.images is not None else None,
-                subpixel_px=float(s_cfg.get("subpixel_px", 0.0)))
-            r.template_idx = m.template_idx
-            r.template_score = m.score
-            results.append(r)
+        # 在线早停（matching.early_stop）时，PnP 已在解码回调里跑完，
+        # 结果与对应集经 ex["es_pnp"] 传入，这里直接复用（不再重跑）。
+        es = ex.get("es_pnp")
+        if es is not None:
+            results: List[PnPResult] = es["results"]
+            corr_list = es["corr_list"]
+        else:
+            results: List[PnPResult] = []
+            # 逐模板 (pts2d, pts3d, pix_t_valid, pix_q_match_valid, tpl_img)，
+            # 联合 PnP 精化与 NCC 亚像素分组复用
+            corr_list = []
+            for m in matches:
+                self._pnp_one(m, ex, K_query, corr_list, results)
 
         # ---- 深度一致性过滤（depth_filter）：掩码面积比预测深度 vs PnP
         # 深度的量级校验。爆炸位姿（t 偏移数百 mm）的深度与物体在掩码中
