@@ -22,7 +22,10 @@
 
 | 项 | 说明 |
 |---|---|
-| 6d-ablation-full（运行中）| 论文 §3.3 消融（120 帧 × 5 弱物体，guided base）：01 topk ✓（30.50/40.00/42.50/43.50/49.17）、02 n_templates ✓（36.17/31.83/19.83/49.33）；09/07/08/03/tzdepth 统一 pre-fix 重跑中（joint dc2 修复 0f0d0bb 净 -4.00 已回退 fad8943），预计 08-15 ~21:00 完；结果 outputs/ablation_<name>.json |
+| 6d-adaptive-k-sim（运行中）| 自适应 K 早停：采集（duck/ape ✓，cat/hp/phone 排队中，ETA ~08:20）→ 逐物体仿真（链自动）→ **在线验证**（es_verify_watcher 等链退出后跑 coarse + ia 两档）。离线发现：选择失败帧正确候选内点从不更高但解码排名更早（duck/ape 早停 Δ+3.33/+7.50 @ meanK~2.5）；K 曲线 dip = 后期自洽错候选被 inlier-best 选中；在线实现已提交 2c2d81e |
+| 6d-fib24（链内排队）| fibonacci 24 视角 × 5 = 120t 模板密度消融；recovery 链在 adaptive-k 后自动 onboard 120t + 评测（~3h） |
+| 6d-localt-off（链内排队）| 备选解码消融（detection.loc_alt: false）；recovery 链 fib24 后自动跑（~1.5h） |
+| 6d-ablation-full（已结案 08-16）| 论文 §3.3 十组消融全部跑齐（子集口径 120 帧 × 5 弱物体）：topk K 曲线 30.50→49.33、matcher（DINOv2-patch 10.16 vs MASt3R 49.33）、renderer（3DGS 49.33 vs pyrender CAD 1.67，zfar 修复后）、selection 四策略 ±0.5 判平（consensus 49.00）、ransac_eps（ε≥8 崩溃）、joint_templates（J 曲线双峰 J∈{5,12}）、tzdepth（+0.5 但异构）、n_templates、gateoff（门保护 hp +15.83） |
 | 6d-gap-oracle（已结案 08-11）| 候选池 vs 选择损失：top40 池内 GT 择优 62.0 ≈ 端到端 61.2（+0.8）——**候选池生成是总瓶颈**；分型：duck/cat 池有货选择倒挂、ape/phone 池没货优化净赚 |
 | 6d-mask-geo（已结案 08-11）| 掩码几何平移候选判负（duck FastSAM -3.33 / GT 掩码 -2.50）：机制无效非掩码拖累；失败帧再分解：48.5% 旋转对 t 错（tz 仅 35 帧、xy 错 1556 帧、GT t 替换 100% 恢复）→ 平移病态实为 xy；BOP 深度图可用（从未用于推理）|
 | 6d-tz-depth（已结案 08-11）| 平移病态两档收官：深度档 +4.17（z 正确是 xy 对齐前提，RGB-D 充分条件）；三个 RGB-only 档全负（tzxy -1.67 / t-only -2.50 / mask-geo -3.33）——**单目平移病态=信息极限**；主表 RGB 单目口径，作第四章可解性证据 |

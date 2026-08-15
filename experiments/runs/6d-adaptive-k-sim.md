@@ -1,0 +1,96 @@
+# 6d-adaptive-k-sim —— 自适应 K 早停离线仿真 + 在线实施
+
+## Metadata
+
+| 字段 | 值 |
+|---|---|
+| ID | `6d-adaptive-k-sim` |
+| Owner | agent |
+| Status | `running` |
+| Started | `2026-08-16 03:55` |
+| Finished | empty |
+| Queue row | `experiments/QUEUE.md::6d-adaptive-k-sim` |
+
+## Question
+
+K 曲线饱和（K≥20 后 +1.0~+5.67）：逐帧"内点 plateau 早停"（连续 w 个解码模板增益 ≤ δ 即停，min_k 兜底）能把平均解码数压到多少、ADD 损失多少？是否存在"解码更少且精度更高"的 Pareto 点？
+
+## Protocol
+
+| 项 | 值 |
+|---|---|
+| Config | `configs/experiments/dense80_topk_instr.yaml`（采集）+ `scripts/analysis/simulate_adaptive_k.py`（仿真）+ `configs/experiments/dense80_es.yaml` / `dense80_es_ia.yaml`（在线验证） |
+| Code change | `2c2d81e`（在线早停实现：plateau_step + matcher 早停模式 + pipeline _pnp_one 抽取）+ `53179c8`（验证配置） |
+| Data split | 120 帧 × 5 弱物体（duck ape cat holepuncher phone） |
+| Metrics | 粗位姿 ADD(S)@0.1d（仿真基线=K=40 inlier-best，与主表口径一致的逐帧重算）；在线验证含级联 |
+| Baseline | K=40 粗位姿 49.33（5 弱物体均值）；champion 级联 61.20 |
+| Success line | 存在规则：mean K ≤ 20 且 ADD ≥ K=40 基线 -1.0 → 实施在线早停 |
+
+## Commands
+
+```bash
+# 采集（cand_* 落盘，topk_instr 档；recovery 链自动跑，03:55 起）
+python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_topk_instr.yaml \
+    --objects duck ape cat holepuncher phone --max-frames 120 \
+    --cache-dir outputs/exp_adaptive_k/cache --out outputs/exp_adaptive_k/result.json
+
+# 逐物体早停仿真（纯 CPU，recovery 链自动跑）
+python3 scripts/analysis/simulate_adaptive_k.py --cache outputs/exp_adaptive_k/cache/<obj>.jsonl \
+    --object <obj> --w 2,3,5 --delta 0,50,200 --ratio 0.02,0.05,0.10 --min-k 5,8,12
+
+# 在线验证（es_verify_watcher.sh，等主链退出后自动跑）
+python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_es.yaml \
+    --objects duck ape cat holepuncher phone --max-frames 120 \
+    --cache-dir outputs/exp_es/cache --out outputs/exp_es/result.json
+python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_es_ia.yaml \
+    --objects duck ape cat holepuncher phone --max-frames 120 \
+    --cache-dir outputs/exp_es_ia/cache --out outputs/exp_es_ia/result.json
+```
+
+## Live Log
+
+- `08-16 03:55`：recovery 链启动采集（topk_instr，cand_* 字段确认落盘：cand_Rs/ts/inliers/scores/adds/order/templates/projs/reproj/ncorr）。
+- `08-16 04:20`：duck 33 帧时仿真冒烟通过（缓存格式兼容，早停规则扫描可用）。
+- `08-16 05:00`：duck 采满（120 帧），离线分析突破：
+  - 池内有货 78/120（65%），inlier-best 只命中 33/120（27.5%），**选择失败 45 帧（37.5%）**；
+  - 选择失败帧里正确候选内点**从不更高**（Δinlier 中位 -93，0% 帧更高）——自洽错候选内点虚高；
+  - 但正确候选在解码顺序上**更靠前**（中位早 5 位，60% 帧）——早停可把后期坏候选排除。
+  - **前缀重放复现 K 曲线 dip 机制**：K=1 17.5 → K=5 31.67（峰）→ K=10/15 26.67（谷）→ K=40 27.50——与官方 duck K 曲线 dip（K=20 19.17）同形。K 曲线非单调 = 后期自洽错候选被 inlier-best 选中的系统性偏差。
+- `08-16 05:05`：duck 全量仿真：**baseline 27.50 → 早停最优 30.83（Δ+3.33）@ meanK 2.9**（规则 w=5/δ=50/min_k=5）；多个规则 Δ+2.5 且 meanK 2.2-2.6。
+- `08-16 05:40`：ape 采满，全量仿真：**baseline 24.17 → 31.67（Δ+7.50）@ meanK 2.5**（w=2/δ=200 或 rel0.05/min_k=8）。
+- `08-16 05:45`：排名分布：duck 有货帧正确候选 top-3 47%/top-5 65%；ape top-3 62%/top-5 70%——机制上限与早停增益一致。
+- `08-16 06:00`：在线早停实现完成并提交（`2c2d81e`）：plateau_step（绝对/相对双阈值）+ matcher 逐模板解码早停模式（独立 NN，与融合互斥）+ pipeline `_pnp_one` 抽取共用 + 配置项（early_stop/w/delta/ratio/min_k）+ 8 个单测（214 全绿）。验证配置 `dense80_es.yaml`（粗位姿档）/`dense80_es_ia.yaml`（champion 级联档）已建（`53179c8` 已 push）。
+- `08-16 06:05`：es_verify_watcher.sh（PID 667072）挂起，等主链退出后自动跑在线验证两档。
+
+## Result
+
+### 离线仿真（单候选 inlier-best 口径，无联合 PnP；官方 K=40 粗位姿含 J=12 联合，数字口径不同，Δ 是仿真内相对值）
+
+| 物体 | K=40 基线 | 早停最优 ADD | ΔADD | meanK | 规则 |
+|---|---|---:|---:|---:|---|
+| duck | 27.50 | 30.83 | **+3.33** | 2.9 | w=5, δ=50, min_k=5 |
+| ape | 24.17 | 31.67 | **+7.50** | 2.5 | w=2, rel0.05, min_k=8 |
+| cat | - | - | - | - | 待采集 |
+| holepuncher | - | - | - | - | 待采集 |
+| phone | - | - | - | - | 待采集 |
+
+### 在线验证（待跑）
+
+| 档位 | 基线 | this run | delta | note |
+|---|---:|---:|---:|---|
+| 粗位姿 K=40 | 49.33 | - | - | outputs/exp_es/result.json |
+| champion 级联 | 61.20 | - | - | outputs/exp_es_ia/result.json |
+
+## Decision
+
+- 结论：`running`
+- 原因：2/5 物体仿真确认机制（早期正确候选 vs 后期自洽错高内点候选），在线实施已提交；等全物体仿真 Pareto + 在线验证数字。
+- 下一步：采集完 → 全物体仿真（链自动）→ 在线验证两档（watcher 自动）→ 数字入论文 §5.4 + 四件套收尾。
+
+## Sync Checklist
+
+- [ ] `experiments/QUEUE.md` 状态已更新（running）
+- [ ] `docs/STATE.md` 冠军/在跑/下一步已更新
+- [ ] `docs/LEDGER.md` 已新增或更新一行
+- [ ] 结果文件路径写清楚
+- [ ] `python3 scripts/analysis/check_state.py` 通过

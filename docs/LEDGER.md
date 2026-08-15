@@ -53,11 +53,13 @@
 | dense80_depthc_lg.yaml | done | 6d-lightglue 稀疏匹配判负**全灭**：duck 120 帧 0.00/0.00/0.00——域差下稀疏对应 ~29 对 → PnP 数值爆炸（t~5e16）；对应质量两路线对比：稠密 desc+几何先验 >> 零训练稀疏匹配；与 conf-filter/768 三线闭合（代码 16eb089，LightGlueMatcher 保留作消融档）|
 | dense80_depthc_dinov2patch.yaml | running | 6d-ablation-full 03_matcher 组：DINOv2 patch token 稠密匹配器消融（120 帧 × 5 弱物体，批处理 b4zzkzkup）|
 | dense80_depthc_consensus.yaml | running | 6d-consensus 模板层解集共识择优：inlier 择优选中"自洽地错"解时，位姿聚类（10°/25mm）最大簇内 inlier 择优替换；无簇保守不换（安全门控）；纯几何不依赖渲染/掩码；08-13 对称等价位姿聚类 + joint 门控等价类判定（c48d8aa/51d70de）；5 弱物体 120 帧排队（duck verify 后自动跑）|
-| experiments/dense80_topk_instr.yaml | current | 6d-adaptive-k-sim 数据采集档（guided + topk_best [40]）：缓存落盘逐候选 inliers/位姿/解码顺序（cand_*），离线早停仿真 + 07 组 inlier_ratio/reproj 离线重排 |
-| experiments/dense80_fib24.yaml | todo | 6d-fib24 fibonacci 视角密度消融（24×5=120t，夹角 47.5°→~36°）：80t 甜点论断的密度缺口验证；adaptive-k 之后自动跑 |
-| ablations/11_joint_templates.yaml | todo | 6d-ablation 第 11 组（08-14 补）：联合 PnP 合并模板数 J 消融（sweep 1/5/10/20，默认 12=default.yaml）；§3.6.3 贡献首次量化；链2（post_chain2.sh）在 fib24 后自动跑 |
-| experiments/dense80_ia_gateoff.yaml | todo | 6d-ia-gateoff（08-14）：iter_align 接受/拒绝门消融（iter_align_gate: false，代码旗标默认 true 行为不变）；量化门保护 vs 阻塞；链2 自动跑 |
-| experiments/dense80_localt_off.yaml | todo | 6d-localt-off（08-14）：定位候选消歧备选解码消融（loc_alt: false，代码旗标默认 true 行为不变）；弱物体 53% 帧 +2.0s/帧 的 ADD 贡献量化；链2 自动跑 |
+| experiments/dense80_topk_instr.yaml | done | 6d-adaptive-k-sim 数据采集档（guided + topk_best [40]）：缓存落盘逐候选 cand_*；duck/ape 采满（08-16），cat/hp/phone 链中；离线仿真 duck +3.33/ape +7.50 @ meanK~2.5 |
+| experiments/dense80_es.yaml | running | 6d-adaptive-k-sim 在线验证粗位姿档（08-16）：matching.early_stop 开（w=2/ratio=0.05/min_k=8），base guided；对比 K=40 粗位姿 49.33 |
+| experiments/dense80_es_ia.yaml | running | 6d-adaptive-k-sim 在线验证级联档（08-16）：early_stop + champion ia 级联；对比 61.20 |
+| experiments/dense80_fib24.yaml | running | 6d-fib24 fibonacci 视角密度消融（24×5=120t，夹角 47.5°→~36°）：80t 甜点论断的密度缺口验证；recovery 链在 adaptive-k 后自动 onboard+评测（08-16）|
+| ablations/11_joint_templates.yaml | done | 6d-ablation 第 11 组（08-14 补）：J=1 45.33 / J=5 49.33 / J=10 46.00 / J=20 45.83——J 曲线双峰（J∈{5,12} 并列），增益集中 J≤5（+4.0）；默认 J=12 与 J=5 并列最优（08-16 结案）|
+| experiments/dense80_ia_gateoff.yaml | done | 6d-ia-gateoff（08-16 结案）：gate-off 57.33 vs gate-on 61.20（-3.87）——门是保护机制（hp -15.83 全靠门挡），不阻塞真收益（duck +16.67 级联增益未被挡）|
+| experiments/dense80_localt_off.yaml | running | 6d-localt-off（08-14 登记）：定位候选消歧备选解码消融（loc_alt: false）；recovery 链在 fib24 后自动跑（08-16）|
 | 6d-pnp-multisol（诊断）| done | 挑战 2 判死：duck 60 帧 × 30 次 RANSAC 全单解——硬对应 + EPnP 无多解性；inlier 择优 60/60 命中；瓶颈确证候选池生成 |
 | dense80_depthc_ia_track.yaml | done | 6d-track-seed 帧间跟踪种子：duck 50.83（+3.33 vs 基线）但低于 multi 55.83；代价 +40% 不划算；仅论文视频扩展素材 |
 | dense80_depthc_ia_multirefine.yaml | done | 6d-multi-refine 种子级渲染对比优化判负：duck 49.17（-6.66 vs multi）——refiner 盆底择优失效（ADD -6.66 但 Proj +9.16）；渲染对比优化两轮判负结案 |
