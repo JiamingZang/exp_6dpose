@@ -404,8 +404,9 @@ class Mast3rMatcher:
             per_template_cb: 在线早停回调（6d-adaptive-k-sim）。给定时
                 进入早停模式：逐模板解码 → 独立 NN 匹配 → 回调（管线侧
                 跑 RANSAC-PnP 返回内点数）→ plateau 判定停止。回调签名
-                cb(match: TemplateMatch) -> Optional[float]；返回的 matches
-                只含已解码前缀，顺序即解码顺序。
+                cb(match: TemplateMatch, sx: float, sy: float)
+                -> Optional[float]；sx/sy 为查询图 resize 比例（匹配区 →
+                裁剪区）。返回的 matches 只含已解码前缀，顺序即解码顺序。
 
         Returns:
             matches: Top-K 模板的 TemplateMatch 列表（降序）
@@ -480,7 +481,7 @@ class Mast3rMatcher:
                         i, desc_cache[i], pix_q_all, scores, sim_threshold,
                         cycle_tau_px, n_sample, rng)
                     matches.append(m)
-                    inl = per_template_cb(m)
+                    inl = per_template_cb(m, sx, sy)
                     best_inl, stall, stop = plateau_step(
                         best_inl, stall, decoded, inl,
                         w=es_w, delta=es_delta, min_k=es_min_k,

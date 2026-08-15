@@ -797,10 +797,9 @@ class PoseEstimator:
                     "（解码顺序先验）；template_ranking=mast3r 的排序在打分"
                     "之后才知道，无法早停。请改用 dinov2 或关闭 early_stop")
             es_state = {"results": [], "corr_list": []}
-            es_t0 = time.time()
             _es_pnp_time = {"t": 0.0}
 
-            def es_cb(m):
+            def es_cb(m, sx, sy):
                 t0 = time.time()
                 r = self._pnp_one(
                     m, {"crop_box_used": crop_box_used,
