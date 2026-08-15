@@ -2366,10 +2366,16 @@ def evaluate_object(cfg: Dict, obj_name: str, device: str = "cuda",
                 "cand_scores": ([c.get("score") for c in res.candidates]
                                 if res.candidates else []),
                 "cand_order": res.decode_order,
-                # 逐候选位姿（模型系，ADD 精确重算用；~4KB/帧可忽略）
-                "cand_Rs": ([c.get("R") for c in res.candidates]
+                # 逐候选位姿（模型系，ADD 精确重算用；~4KB/帧可忽略）。
+                # np.ndarray → list：json.dumps(default=float) 只支持 0 维
+                # 数组，2D 位姿直接序列化会炸（adaptive-k 采集事故，08-15）
+                "cand_Rs": ([c.get("R").tolist()
+                             if c.get("R") is not None else None
+                             for c in res.candidates]
                             if res.candidates else []),
-                "cand_ts": ([c.get("t") for c in res.candidates]
+                "cand_ts": ([c.get("t").tolist()
+                             if c.get("t") is not None else None
+                             for c in res.candidates]
                             if res.candidates else []),
                 # 逐候选对应数/内点重投影残差（inlier_ratio / reproj 策略
                 # 离线重排用，与 07 组消融互补，08-13）

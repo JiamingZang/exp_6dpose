@@ -168,6 +168,11 @@ def rank_candidates(results: List[PnPResult], strategy: str = "inlier",
             axes, g, lam = prior_info
             key = lambda r: (r.n_inliers
                              + lam * stable_prior_score(r.R, axes, g))
+    elif strategy == "consensus":
+        # 模板层解集共识（6d-consensus）：最终选择在 pipeline._solve 中由
+        # consensus_best 覆盖（最大簇内 inlier 最大者，无簇保守不换）。
+        # 这里的排序只提供 best 兜底（与 inlier 同序），不在此实现聚类。
+        key = lambda r: r.n_inliers
     else:
         raise ValueError(f"未知择优策略: {strategy}")
     return sorted(pool, key=key, reverse=True)

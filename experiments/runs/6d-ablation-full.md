@@ -156,6 +156,16 @@ python scripts/eval/run_ablation.py --config configs/current/dense80_depthc_guid
   1/600 帧（0.2%）不同**——择优判据对最终质量影响可忽略；"择优价值=为联合
   解/引导精化提供高质量起点"（论文 §3.6.2）获逐帧证据。预判（21:25
   "weighted 档也 ≈ 49-50"）命中 ✓
+- `08-15 11:00`：**链 1 失败诊断与修复（08-14 遗留三步全失败但 DONE 盲 touch）**：
+  (1) consensus 崩于 rank_candidates 无 consensus 策略（ValueError 拦截在
+  pipeline 的 consensus_best 分支之前）——selection.py 补直通（排序兜底，
+  聚类覆盖仍由 pipeline 完成）；(2) adaptive-k 采集崩于缓存序列化：
+  cand_Rs/cand_ts 是 2D np.ndarray，json.dumps(default=float) 只支持 0 维——
+  改 .tolist()；(3) fib24 崩于缺 120t 模板库（链脚本无 onboard 步骤）——
+  新链脚本补 onboard + 严格 rc 检查（成功才 touch DONE）。watchdog 10:44
+  重复拉起的 duck_kcurve_verify（会覆盖合并后的 ablation_topk.json）已杀。
+  修复链（/tmp/post_chain_fix.sh）等 chain2（11_joint→ia_gateoff→localt_off）
+  结束后跑 consensus → adaptive-k 采集 → 仿真 → fib24。测试 206 过。
 - `08-15 10:42`：**duck K 曲线验证结案（全新缓存 + 新代码）**：K=1 15.83 /
   K=5 30.83 / K=10 27.50 / K=20 19.17 / K=40 30.83——**K=20 非单调回退复现
   确认**（旧缓存 28.33→20.0 同构），非伪影；且 K∈[5,20] 呈系统性下降后 K=40
