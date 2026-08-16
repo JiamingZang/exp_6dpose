@@ -71,6 +71,7 @@ python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_es_ia.y
 - `08-16 08:20`：**ape 在线粗位姿 40.83 vs 官方 44.17（-3.34）**——与 duck 相反！ape 的粗位姿高度依赖联合 PnP（sim 无联合 24.17 → 官方含联合 44.17，+20），早停把联合池从 12 收窄到 8 且匹配改独立 NN，净亏。归因待对照档（es_nostop：独立 NN + K=40）判定：若 es_nostop≈40.83 则亏在独立 NN；若≈44.17 则亏在早停排除本身。
 - `08-16 09:00`：**在线粗位姿全物体盘点（官方基线=采集缓存同配置）**：duck 30.83→34.17（+3.33）/ ape 46.67→40.83（-5.83）/ cat 53.33→49.17（-4.17）/ hp 50.83→35.00（-15.83）/ phone 65.00→60.83（-4.17）——**粗位姿口径判负（5 物体均值 44.00 vs 49.33，-5.33）**，仅 duck 净正。根因：粗位姿精度依赖融合-12 匹配 + 联合 PnP 池（hp 官方 K 曲线单调上升最依赖），早停同时收窄两者；仿真（单候选无联合）口径掩盖了这层依赖。**决策点移到 es_ia 级联档**（09:11 起跑，ETA ~12:00）：iter_align 重匹配能否吸收粗位姿差异。v2 候选方案：早停判定用独立 NN（省解码），最终匹配对解码前缀重跑融合（保质量）。
 - `08-16 11:00`：**es_ia 中期（3/5）**：duck 45.00（-2.50）/ ape 60.00（+0.83）/ cat 74.17（**+10.00**）——级联层大幅吸收粗位姿差异并放大选择收益（cat 粗位姿 -4.17 → 级联 +10.00；逐帧救 21 丢 9）。**方法论结论：择优机制消融应以级联层为决策口径**（粗位姿口径双重误导：无联合 PnP 高估 + 无级联漏 basin 效应）。hp 89/120、phone 排队。
+- `08-16 11:36`：**es_ia 终判：60.17 vs 61.00（-0.84，噪声带内）**——duck -2.50 / ape +0.83 / cat +10.00 / hp -10.00 / phone -2.50。级联吸收大部分粗位姿损失（粗位姿曾 -5.33），但 hp 重灾（-10.00，K 曲线单调上升型最依赖全池）。采纳判定：**±1.0 带内判平**，v2（前缀融合）若能救 hp 则整体转正；对照档（es_nostop）先判定 hp 损失归因（独立 NN vs 排除本身）。
 - `08-16 06:48`：**链事故 1（fib24 onboard 命令错）**：recovery 链 fib24 段调用 `scripts/data/onboard_object.py`——该路径不存在（AGENTS.md 主链命令过时；真实入口是 `src.pipeline.onboard_object` 函数），5 物体 onboard 全失败 + 评测缺库 → rc=1 链中止，localt_off 未跑。修复：AGENTS.md 主链命令更正；续链 /tmp/post_recovery2.sh（正确 python -c 调用 onboard_object）等 es 验证后补跑 fib24 + localt_off。
 - `08-16 06:50`：**链事故 2（es_cb 闭包未绑定）**：es 粗位姿档首帧崩溃 `NameError: free variable 'sx'`——es_cb 闭包引用 `sx, sy`，但二者由 matcher.match 返回才绑定，回调在返回前被调用。修复 `661c5be`：matcher 回调签名改为 `cb(m, sx, sy)`（内部尺度直接传入）。pytest 214 全绿；重挂 watcher + 续链。帧 1 实测：decoded=8（min_k 地板）、matching 1.46s vs 40 解码 4.38s。
 
@@ -92,7 +93,7 @@ python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_es_ia.y
 | 档位 | 基线 | this run | delta | note |
 |---|---:|---:|---:|---|
 | 粗位姿 K=40 | 49.33 | 44.00 | **-5.33** | 在线口径：duck +3.33 / ape -5.83 / cat -4.17 / hp -15.83 / phone -4.17；仿真 +5.00 被联合 PnP+融合依赖抵消 |
-| champion 级联 | 61.20 | - | - | outputs/exp_es_ia/result.json |
+| champion 级联 | 61.00 | 60.17 | **-0.84** | 噪声带内：duck -2.50 / ape +0.83 / cat +10.00 / hp -10.00 / phone -2.50；hp 归因待对照档 |
 
 ## Decision
 
