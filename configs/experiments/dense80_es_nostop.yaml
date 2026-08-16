@@ -1,0 +1,8 @@
+# 对照档：matching.fusion=false（独立 NN）+ early_stop=false（K=40 全解码）
+# 用途：分离 es 在线实验的两个效应——
+#   es(早停+独立NN) vs 本档(独立NN) = 纯早停效应
+#   本档 vs 官方 guided(fusion-12)   = 融合匹配效应
+base: ../current/dense80_depthc_guided.yaml
+
+matching:
+  fusion: false
