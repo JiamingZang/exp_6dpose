@@ -409,6 +409,11 @@ class Mast3rMatcher:
         sel = sel[:int(self.cfg.get("fusion_topk", 12))]
         if not sel:
             return matches, (sx, sy), scores, top_full
+        # fusion 匹配仓库级关闭（dense80.yaml:9 融合匹配已证伪）；若配置
+        # 仍开 early_stop_fusion 而 fusion 未开，回退独立 NN 前缀，防
+        # _fusion_match 无 else 分支返回 None（20:10 v2 首跑崩溃根因）。
+        if not bool(self.cfg.get("fusion", False)):
+            return matches, (sx, sy), scores, top_full
         return (self._fusion_match(
             sel, desc_cache, pix_q_all, scores, sim_threshold,
             cycle_tau_px, n_sample, rng), (sx, sy), scores, top_full)

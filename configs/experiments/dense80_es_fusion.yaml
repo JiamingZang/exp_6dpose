@@ -1,18 +1,20 @@
-# 早停 v2 验证档（08-16）：early_stop_fusion = 早停判定用独立 NN（省解码），
-# 收尾对解码前缀重跑融合匹配（保质量）。修复 v1 的融合依赖物体损失
-# （ape/cat/hp/phone 粗位姿 -4~-16，根因=独立 NN + 池收窄伤融合+联合 PnP）。
-base: ../current/dense80_depthc_guided.yaml
+# 早停 v2 验证档（08-16 20:15 修正设计）：es_nostop 归因结案后重定向。
+#   原设计（early_stop_fusion）前提错误：仓库 fusion 匹配早已证伪
+#   （dense80.yaml:9 融合匹配已证伪），官方管线 = 独立 NN + 联合 PnP(J=12)；
+#   es_nostop 证明独立 NN 在 K=40 下与官方几乎无损（49.00 vs 49.33），
+#   早停损失全在"联合 PnP 池收窄"（v1 min_k=8 < J=12，hp -15.83 最重）。
+#   ⇒ v2 = 早停（判定仍用独立 NN + 逐模板 PnP）+ min_k=12（恢复联合池）
+#         + selection=weighted（前缀短时抗自洽错劫持，16:20 离线扫描）。
+#   决策口径 = 级联层（champion ia 基线 61.00；es_ia v1 曾 -0.84）。
+#   score 停表（17:15 离线 MEAN +3.0）留 v2.1，v2 判决后实施。
+base: ../current/dense80_depthc_ia.yaml
 
 matching:
   early_stop: true
-  early_stop_fusion: true
   early_stop_w: 2
   early_stop_delta: 0
   early_stop_ratio: 0.05
-  early_stop_min_k: 8
+  early_stop_min_k: 12
 
-# 前缀内择优键：weighted（inlier×score）。离线扫描（simulate_select_key.py）
-# 5 物体一致 ≥ inlier（前缀短时加权抗"自洽错"劫持）；官方 K=40 全解码
-# 消融显示键无差别（49.33/49.50/49.50）→ 不混淆 es_nostop（K=40）对照。
 solver:
   selection: weighted
