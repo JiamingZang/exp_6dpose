@@ -1,0 +1,9 @@
+# 3DGS 训练参考视图数消融（6d-refviews，08-17）：64 → 128 视图，隔离验证
+# 30k 实验把 iterations(7000→30000) 与 n_ref_views(64→128) 混杂了：
+# 保留的 3 物体（duck/ape/hp）是 30k+128v 全配方，其余 10 物体是旧世代
+# bank（7000/64v，无 train_fp）。本档只动视图数，其余保持 champion 配方
+# （7000 迭代 + invdepth 锚点 + depth_l1_weight 0.6 + 背景按物体）。
+base: ../current/dense80_depth_bg0.yaml
+
+onboard:
+  n_ref_views: 128
