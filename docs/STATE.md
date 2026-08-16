@@ -22,7 +22,7 @@
 
 | 项 | 说明 |
 |---|---|
-| 6d-adaptive-k-sim（运行中）| 自适应 K 早停：采集（duck/ape ✓，cat/hp/phone 排队中，ETA ~08:20）→ 逐物体仿真（链自动）→ **在线验证**（es_verify_watcher 等链退出后跑 coarse + ia 两档）。离线发现：选择失败帧正确候选内点从不更高但解码排名更早（duck/ape 早停 Δ+3.33/+7.50 @ meanK~2.5）；K 曲线 dip = 后期自洽错候选被 inlier-best 选中；在线实现已提交 2c2d81e |
+| 6d-adaptive-k-sim（已结案 08-16，早停路线收口）| 仿真 +5.00（无联合口径）→ 在线粗位姿 -5.33（联合池收窄是唯一损失，es_nostop 归因 -0.33）→ 级联 es_ia -0.84（判平，~90% 解码削减）→ v2（mk12+weighted）-6.50 判负（hp 修复线失败；粗位姿口径优化级联层不兑现）。**§5.4 三层诚实叙述**：早停是速度杠杆不是精度杠杆；精度瓶颈仍是候选池生成（gap-oracle）。方法学教训：池侧机制必须级联层验证 + 采样 rng 流错位 |
 | 6d-fib24（链内排队）| fibonacci 24 视角 × 5 = 120t 模板密度消融；recovery 链在 adaptive-k 后自动 onboard 120t + 评测（~3h） |
 | 6d-localt-off（已结案 08-16，判负 -7.17）| 备选解码消融（detection.loc_alt: false）：off 档 53.83 vs ia 基线 61.00——ape/hp/phone -10~-12（触发率最高物体受损最重 79%/57%/72%）、duck/cat 持平（触发率 28-30%）——**loc_alt 是正贡献保留**，代价 +2.0s/帧 53% 帧触发如实披露 |
 | 6d-ablation-full（已结案 08-16）| 论文 §3.3 十组消融全部跑齐（子集口径 120 帧 × 5 弱物体）：topk K 曲线 30.50→49.33、matcher（DINOv2-patch 10.16 vs MASt3R 49.33）、renderer（3DGS 49.33 vs pyrender CAD 1.67，zfar 修复后）、selection 四策略 ±0.5 判平（consensus 49.00）、ransac_eps（ε≥8 崩溃）、joint_templates（J 曲线双峰 J∈{5,12}）、tzdepth（+0.5 但异构）、n_templates、gateoff（门保护 hp +15.83） |

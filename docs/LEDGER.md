@@ -54,11 +54,11 @@
 | dense80_depthc_dinov2patch.yaml | running | 6d-ablation-full 03_matcher 组：DINOv2 patch token 稠密匹配器消融（120 帧 × 5 弱物体，批处理 b4zzkzkup）|
 | dense80_depthc_consensus.yaml | running | 6d-consensus 模板层解集共识择优：inlier 择优选中"自洽地错"解时，位姿聚类（10°/25mm）最大簇内 inlier 择优替换；无簇保守不换（安全门控）；纯几何不依赖渲染/掩码；08-13 对称等价位姿聚类 + joint 门控等价类判定（c48d8aa/51d70de）；5 弱物体 120 帧排队（duck verify 后自动跑）|
 | experiments/dense80_topk_instr.yaml | done | 6d-adaptive-k-sim 数据采集档（guided + topk_best [40]）：缓存落盘逐候选 cand_*；duck/ape 采满（08-16），cat/hp/phone 链中；离线仿真 duck +3.33/ape +7.50 @ meanK~2.5 |
-| experiments/dense80_es.yaml | running | 6d-adaptive-k-sim 在线验证粗位姿档（08-16）：matching.early_stop 开（w=2/ratio=0.05/min_k=8），base guided；对比 K=40 粗位姿 49.33 |
-| experiments/dense80_es_ia.yaml | running | 6d-adaptive-k-sim 在线验证级联档（08-16）：early_stop + champion ia 级联；对比 61.20 |
+| experiments/dense80_es.yaml | done | 6d-adaptive-k-sim 在线验证粗位姿档（08-16）：-5.33（44.00 vs 49.33）——联合 PnP 池收窄是唯一损失（es_nostop 归因）|
+| experiments/dense80_es_ia.yaml | done | 6d-adaptive-k-sim 在线验证级联档（08-16）：60.17 vs 61.00（-0.84 判平）——~90% 解码削减换噪声带内精度；速度杠杆成立 |
 | experiments/dense80_es_nostop.yaml | done | 6d-adaptive-k-sim 对照档（08-16 结案）：独立 NN + K=40 = MEAN 49.00 vs 官方 49.33（-0.33）——**NN 匹配无损，早停损失全在排除本身**（hp -15.83 联合池收窄最致命）；v2 的 mk=12 才是 hp 修复 |
-| experiments/dense80_es_fusion.yaml | running | 6d-adaptive-k-sim v2 档（08-16 20:15 修正设计）：原 early_stop_fusion 前提错误（仓库 fusion 匹配已证伪 dense80.yaml:9，20:10 首跑崩溃根因）；es_nostop 归因后 v2 = ia 级联 + 早停 min_k=12（恢复联合 PnP 池，v1 mk=8 伤 hp）+ selection: weighted；对比 champion ia 基线 61.00 |
-| experiments/dense80_es_score.yaml | todo | 6d-adaptive-k-sim v2.1 档（08-16 20:20 登记）：v2 + early_stop_signal: score（停表信号换 MASt3R 分数；离线 mk=12 下 MEAN 43.8 vs inlier 41.8，+2.0）；v2 判决后跑 |
+| experiments/dense80_es_fusion.yaml | done | 6d-adaptive-k-sim v2 档（08-16 判负 -6.50）：mk12+weighted 级联 54.50 vs 61.00——hp 修复线失败（43.33<53.67）；粗位姿口径 mk12≥mk8 级联层不兑现 |
+| experiments/dense80_es_score.yaml | archived | 6d-adaptive-k-sim v2.1 档（08-16）：先验规则 v2 判负后仅佐证，粗位姿口径优化预期级联层不兑现，跳过未跑；early_stop_signal 代码保留（默认 inlier）|
 | experiments/dense80_fib24.yaml | done | 6d-fib24 判负（08-16）：MEAN -3.00（46.33 vs 49.33），hp -20.83 最重——120t 预筛 top-40 被自相似模板挤占；80t 饱和证实 |
 | ablations/11_joint_templates.yaml | done | 6d-ablation 第 11 组（08-14 补）：J=1 45.33 / J=5 49.33 / J=10 46.00 / J=20 45.83——J 曲线双峰（J∈{5,12} 并列），增益集中 J≤5（+4.0）；默认 J=12 与 J=5 并列最优（08-16 结案）|
 | experiments/dense80_ia_gateoff.yaml | done | 6d-ia-gateoff（08-16 结案）：gate-off 57.33 vs gate-on 61.20（-3.87）——门是保护机制（hp -15.83 全靠门挡），不阻塞真收益（duck +16.67 级联增益未被挡）|

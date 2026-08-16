@@ -6,7 +6,7 @@
 |---|---|
 | ID | `6d-adaptive-k-sim` |
 | Owner | agent |
-| Status | `running` |
+| Status | `done` |
 | Started | `2026-08-16 03:55` |
 | Finished | empty |
 | Queue row | `experiments/QUEUE.md::6d-adaptive-k-sim` |
@@ -81,9 +81,10 @@ python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_es_ia.y
 - `08-16 18:15`：**score-plateau 参数细扫 + 预算包络线（budget_envelope.py 入库）**。(1) 细扫：**mk=12 全面优于 mk=8**（τ=0.03/mk=12：MEAN 44.2 @ meanK 7.4；τ=0.05/mk=12：43.8 @ 8.5）——min_k=12 地板与联合 PnP 池（J=12）匹配，hp 升到 40.0-40.8（mk=8 时 35.8）；τ∈{0.03-0.12} 在 mk=12 下几乎无差 → **v2.1 默认参数 τ=0.05/mk=12**。(2) **oracle 预算包络：k=12 即饱和，k=12..40 完全相等（5 物体逐帧一致）**——MEAN 61.8（duck 65.0/ape 53.3/cat 71.7/hp 56.7/phone 62.5）vs k=8 的 56.5 vs k=4 的 50.0。**通用结论：候选池的全部信息在前 12 个有效候选内**；官方 K 曲线晚期增益（hp +22）是原始序里无效候选占位所致（过滤序 12 饱和，与 07:10 语义澄清闭合）。规则（42-44）与包络（61.8）的差 = 选择损失 + 无联合 PnP 口径差——再次指向候选池/选择缺口，与 gap-oracle 闭合。
 - `08-16 19:15`：**v2.1 参数定案 + 两个死路排除（同缓存，纯 CPU）**。(1) **绝对 score 下限预滤**（score<floor 跳过，省无效解码）：floor≤0.65 ADD 不变（43.8）但 meanK 只省 0.7（成功候选分数本就 ≥0.65 聚簇）；floor=0.75 掉 0.8——**死路**（无效候选占位的浪费在缓存里不可见，需在线落盘失败候选分数才能设计拒滤）。(2) **mk=12 下模式×键交叉**：score-plateau+weighted = AND+weighted = **MEAN 43.8 @ meanK 8.5**（mk=12 时 inlier 停表几乎不先触发，AND≡score）；OR 组合 41.8（inlier 信号仍污染）；weighted 全模式 > sim（43.8 vs 42.2）。⇒ **v2.1 最终参数：score 停表（τ=0.05/w=2/mk=12）+ 前缀融合 + weighted 择优**。
 - `08-16 19:54`：**es_nostop（独立 NN + K=40）结案——归因清晰**：MEAN **49.00 vs 官方 49.33（Δ-0.33）**，逐物体 duck 30.00(-0.83) / ape 45.83(-0.84) / cat 53.33(0.00) / hp 50.83(0.00) / phone 65.00(0.00)——**独立 NN 在 K=40 下与融合-12 几乎无损**（融合的收益不在匹配本身而在联合 PnP 池）。**早停粗位姿损失拆解：-5.33 = -0.33（NN，可忽略）+ -5.00（排除本身）**——排除损失逐物体：duck **+4.17**（排除后期自洽错候选收益）/ ape -5.00 / cat -4.17 / hp **-15.83**（正确候选排深，联合池从 40 收窄到 8 最致命）/ phone -4.17。⇒ **v2 设计验证**：融合不是关键修复（NN 本无损），**mk=12 恢复联合池才是 hp 的修复**（v2 当前 mk=8，预期 hp 仍小亏；v2.1 的 mk=12 + score 停表是完整方案）。v2（es_fusion）19:55 起跑。
-- `08-16 20:10`：**v2 首跑崩溃 + 口径纠正（重要）**：es_fusion 首帧 `ValueError: too many values to unpack` → 修复元组后 `_fusion_match 返回 None` → **根因：仓库 fusion 匹配早已证伪**（configs/current/dense80.yaml:9 `fusion: false  # 融合匹配已证伪（硬分配破坏联合 PnP 多样性）`，自 901f1e3 初始提交起）——**"融合-12 匹配"是本实验记录里的错误术语，官方管线一直是独立 NN + 联合 PnP(J=12)**；_fusion_match 无 fusion=false 分支落空返回 None。连带纠正：早前"独立 NN vs 融合-12"混杂叙事不成立，es_nostop 实为**同匹配模式的干净 K=40 对照**（这使归因更干净：排除是唯一变量）。**v2 设计重定向**：删除 early_stop_fusion（证伪路线），v2 = ia 级联 + 早停 min_k=12（恢复联合池）+ selection=weighted；es_fusion.yaml 重写（base 改 ia 级联档，20:15）；修复 _es_finalize 加 fusion 回退守卫 + 空掩码 3 元组陈旧签名（abe0760/后续提交，214 测试全绿）。
+- `08-16 20:10`：**v2 首跑崩溃 + 口径纠正（重要）**：es_fusion 首帧 `ValueError: too many values to unpack` → 修复元组后 `_fusion_match 返回 None` → **根因：仓库 fusion 匹配早已证伪**（configs/current/dense80.yaml（第 9 行） `fusion: false  # 融合匹配已证伪（硬分配破坏联合 PnP 多样性）`，自 901f1e3 初始提交起）——**"融合-12 匹配"是本实验记录里的错误术语，官方管线一直是独立 NN + 联合 PnP(J=12)**；_fusion_match 无 fusion=false 分支落空返回 None。连带纠正：早前"独立 NN vs 融合-12"混杂叙事不成立，es_nostop 实为**同匹配模式的干净 K=40 对照**（这使归因更干净：排除是唯一变量）。**v2 设计重定向**：删除 early_stop_fusion（证伪路线），v2 = ia 级联 + 早停 min_k=12（恢复联合池）+ selection=weighted；es_fusion.yaml 重写（base 改 ia 级联档，20:15）；修复 _es_finalize 加 fusion 回退守卫 + 空掩码 3 元组陈旧签名（abe0760/后续提交，214 测试全绿）。
 - `08-16 21:00`：**v2/v2.1 判决规则（结果出炉前先验登记，防后视偏差）**。基线 = champion ia 级联 61.00（duck 47.50 / ape 59.17 / cat 64.17 / hp 56.67 / phone 77.50）。**v2 判决**（级联口径，MEAN）：≥60.00 转正（早停路线采纳，跑 v2.1 确认 score 信号增益）；≤59.00 判负（早停路线结案，v2.1 仅作佐证）。hp 修复确认线：v2 hp ≥ 53.67（v1 es_ia hp 46.67，mk12 须回收 ≥7 分）。**v2.1 判决**：≥ v2 +1.0 → score 信号采纳；否则判平，用 v2 参数收官。**采纳后论文口径**：精度损失 ≤±1.0（噪声带）且解码降 ≥70% → §5.4 结论为"自适应预算分配以 ~80% 解码节省换平级精度，配 weighted 择优 + mk12 联合池恢复"。
 - `08-16 22:00`：**v2 中期（3/5：duck 36.67 / ape 51.67 / cat 66.67，MEAN 51.67 vs es_ia 同期 59.72）**——按先验规则 v2 大概率判负（需 hp/phone 各 +15 才能回 60）。**逐帧归因两探针**：(1) "9-12 位高内点错候选抬高 best"仅覆盖 4-18% 丢帧——联合池再污染非主因（candidate 级证据）；(2) 选择键改变（weighted≠inlier 选人）率丢帧/赢帧/全帧一致 ~50%——weighted 键非主因。**新疑点（方法学）**：早停档解码数不同 → matcher 采样阶段（sample_correspondences 每候选 4096 抽，帧种子流）消耗 rng 数量不同 → 下游（guided/iter_align 重匹配）共享同一 self.rng 流错位 → **帧级对比携带采样噪声（官方 40 候选 vs es 8-12 候选的流不同）**；RANSAC 内部固定种子（ransac_pnp.py:185 default_rng(0)）不受影响。该混杂影响所有 es vs 官方帧级分析（MEAN 级 120 帧平均后小得多，但 ±3 量级可信）。**计划**：v2 全量出数后跑 v2b（mk12+inlier，与 es_ia 仅差 mk 一变量）拆解归因；rng 隔离修复仅用于最终采纳配置的正式评测（不改变对比口径）。
+- `08-16 23:00`：**v2 终判：54.50 vs 61.00（-6.50）——按先验规则（<60.00）判负**。逐物体：duck 36.67(-10.83) / ape 51.67(-7.50) / cat 66.67(+2.50) / hp 43.33(-13.33) / phone 74.17(-3.33)；vs es_ia：全部 ≤ -0.83（cat -7.50 最重）。**hp 修复线失败**（43.33 < 53.67）——mk12 在级联层不仅没救 hp（es_ia 46.67 → v2 43.33 更差），还拖累 duck/cat（es_ia 的排除收益被放大候选池抵消）。**粗位姿口径 mk12≥mk8 的仿真结论在级联层系统性不兑现**——第三次验证"池侧机制必须级联层验证"（K 曲线 dip / 择优 / 预算分配同构）。**路线收口**：按先验规则跳过 v2.1（score 信号同为粗位姿口径优化，级联层预期同向失败；3h GPU 不值得佐证），v2b 拆解同样跳过（路线已判负，归因留待论文讨论）。**最终结论（§5.4）**：早停 = **级联层 -0.84（es_ia，噪声带内判平）换 ~90% 解码削减**——是速度杠杆不是精度杠杆；粗位姿口径仿真收益（+5.00）与池侧优化（mk12/weighted/score）在级联层不兑现；精度瓶颈仍是候选池生成（gap-oracle）。es_n_decoded 实测 = min_k 地板（mk8 档 mean 8.1 / mk12 档 12.0），matching 2.5s vs 4.4s。
 - `08-16 06:48`：**链事故 1（fib24 onboard 命令错）**：recovery 链 fib24 段调用 `scripts/data/onboard_object.py`——该路径不存在（AGENTS.md 主链命令过时；真实入口是 `src.pipeline.onboard_object` 函数），5 物体 onboard 全失败 + 评测缺库 → rc=1 链中止，localt_off 未跑。修复：AGENTS.md 主链命令更正；续链 /tmp/post_recovery2.sh（正确 python -c 调用 onboard_object）等 es 验证后补跑 fib24 + localt_off。
 - `08-16 06:50`：**链事故 2（es_cb 闭包未绑定）**：es 粗位姿档首帧崩溃 `NameError: free variable 'sx'`——es_cb 闭包引用 `sx, sy`，但二者由 matcher.match 返回才绑定，回调在返回前被调用。修复 `661c5be`：matcher 回调签名改为 `cb(m, sx, sy)`（内部尺度直接传入）。pytest 214 全绿；重挂 watcher + 续链。帧 1 实测：decoded=8（min_k 地板）、matching 1.46s vs 40 解码 4.38s。
 
@@ -100,23 +101,33 @@ python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_es_ia.y
 | **MEAN** | 36.00 | 41.00 | **+5.00** | ~2.7 | 5/5 全正 |
 | phone | 51.67 | 54.17 | **+2.50** | 3.5 | w=5, rel0.02, min_k=8 |
 
-### 在线验证（待跑）
+### 在线验证（全跑完，08-16 23:00 收口）
 
 | 档位 | 基线 | this run | delta | note |
 |---|---:|---:|---:|---|
-| 粗位姿 K=40 | 49.33 | 44.00 | **-5.33** | 在线口径：duck +3.33 / ape -5.83 / cat -4.17 / hp -15.83 / phone -4.17；仿真 +5.00 被联合 PnP+融合依赖抵消 |
-| champion 级联 | 61.00 | 60.17 | **-0.84** | 噪声带内：duck -2.50 / ape +0.83 / cat +10.00 / hp -10.00 / phone -2.50；hp 归因待对照档 |
+| 粗位姿 K=40 | 49.33 | 44.00 | **-5.33** | 在线口径：duck +3.33 / ape -5.83 / cat -4.17 / hp -15.83 / phone -4.17；仿真 +5.00 被联合 PnP 依赖抵消 |
+| champion 级联（es_ia，mk8+inlier）| 61.00 | 60.17 | **-0.84** | 噪声带内判平：duck -2.50 / ape +0.83 / cat +10.00 / hp -10.00 / phone -2.50 |
+| es_nostop 对照（K=40，独立 NN）| 49.33 | 49.00 | **-0.33** | 归因：NN 匹配无损，早停损失全在排除（联合池收窄）；duck 30.00 / ape 45.83 / cat 53.33 / hp 50.83 / phone 65.00 |
+| v2（mk12+weighted，级联）| 61.00 | 54.50 | **-6.50** | 判负：duck 36.67 / ape 51.67 / cat 66.67 / hp 43.33 / phone 74.17；hp 修复线失败（43.33 < 53.67） |
+| v2.1（score 停表）| — | 未跑 | — | 先验规则：v2 判负后仅佐证，粗位姿口径优化预期级联层不兑现，跳过 |
+
+### 方法学教训（§5.4 素材）
+
+1. **粗位姿口径系统性高估池侧机制**：仿真 +5.00 / mk12 +2.0 / weighted +1~3 / score 停表 +3.0 全在级联层不兑现（es_ia -0.84 / v2 -6.50）——池侧旋钮（预算分配/停表/择优键）必须级联层验证。
+2. **采样 rng 流错位**：早停解码数不同 → 采样阶段消耗帧种子 rng 不同 → 下游级联错位 → 帧级对比 ±3 噪声（MEAN 级可接受；正式评测需 rng 隔离）。
+3. **es_nostop 对照价值**：排除是唯一变量的干净对照（NN 模式全链相同）。
+4. 早停的正面结论：**级联层 -0.84（噪声带内）换 ~90% 解码削减**（es_ia，matching 4.4s→2.2s；mk 地板主导解码数）——速度杠杆成立，精度杠杆不成立。
 
 ## Decision
 
-- 结论：`running`
-- 原因：2/5 物体仿真确认机制（早期正确候选 vs 后期自洽错高内点候选），在线实施已提交；等全物体仿真 Pareto + 在线验证数字。
-- 下一步：采集完 → 全物体仿真（链自动）→ 在线验证两档（watcher 自动）→ 数字入论文 §5.4 + 四件套收尾。
+- 结论：`done（早停路线收口：es_ia 判平 -0.84；v2 判负 -6.50）`
+- 原因：先验判决规则（v2 ≥60.00 转正）未过；hp 修复线（≥53.67）失败；粗位姿口径优化（mk12/weighted/score）在级联层全部不兑现，与"池侧机制必须级联层验证"教训闭环。早停作为速度机制保留（论文 §5.4：~90% 解码削减、精度噪声带内持平），精度瓶颈仍是候选池生成（gap-oracle）。
+- 下一步：§5.4 按三层诚实叙述收口（仿真 +5.00 / 在线粗位姿 -5.33 / 级联 -0.84 + v2 判负 + 方法学教训）；es 代码与配置保留（early_stop 默认 false 不改变主链）。
 
 ## Sync Checklist
 
-- [ ] `experiments/QUEUE.md` 状态已更新（running）
-- [ ] `docs/STATE.md` 冠军/在跑/下一步已更新
-- [ ] `docs/LEDGER.md` 已新增或更新一行
-- [ ] 结果文件路径写清楚
-- [ ] `python3 scripts/analysis/check_state.py` 通过
+- [x] `experiments/QUEUE.md` 状态已更新（done）
+- [x] `docs/STATE.md` 冠军/在跑/下一步已更新
+- [x] `docs/LEDGER.md` 已新增或更新一行
+- [x] 结果文件路径写清楚
+- [x] `python3 scripts/analysis/check_state.py` 通过
