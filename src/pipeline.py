@@ -796,16 +796,29 @@ class PoseEstimator:
                     "matching.early_stop=true 需要 template_ranking=dinov2 "
                     "（解码顺序先验）；template_ranking=mast3r 的排序在打分"
                     "之后才知道，无法早停。请改用 dinov2 或关闭 early_stop")
-            es_state = {"results": [], "corr_list": []}
+            es_reuse = not bool(m_cfg.get("early_stop_fusion", False))
+            # v2（early_stop_fusion）：融合匹配在 matcher 收尾重跑，回调 PnP
+            # 仅作早停判定（结果不传给 _solve_pnp，后者对融合匹配重跑 PnP）
+            es_state = {"results": [], "corr_list": []} if es_reuse else None
             _es_pnp_time = {"t": 0.0}
+            _es_decoded = {"n": 0.0}
 
             def es_cb(m, sx, sy):
                 t0 = time.time()
-                r = self._pnp_one(
-                    m, {"crop_box_used": crop_box_used,
-                        "s_leg": (s_leg_x, s_leg_y),
-                        "sxy": (sx, sy), "crop": crop},
-                    K_query, es_state["corr_list"], es_state["results"])
+                _es_decoded["n"] += 1.0
+                if es_reuse:
+                    r = self._pnp_one(
+                        m, {"crop_box_used": crop_box_used,
+                            "s_leg": (s_leg_x, s_leg_y),
+                            "sxy": (sx, sy), "crop": crop},
+                        K_query, es_state["corr_list"], es_state["results"])
+                else:
+                    tmp_r, tmp_c = [], []
+                    r = self._pnp_one(
+                        m, {"crop_box_used": crop_box_used,
+                            "s_leg": (s_leg_x, s_leg_y),
+                            "sxy": (sx, sy), "crop": crop},
+                        K_query, tmp_c, tmp_r)
                 _es_pnp_time["t"] += time.time() - t0
                 return r.n_inliers if r is not None and r.success else None
 
@@ -818,9 +831,9 @@ class PoseEstimator:
             rng=self.rng, prefilter_order=prefilter_order,
             per_template_cb=es_cb)
         timings["matching"] = time.time() - t0
-        if es_state is not None:
+        if es_cb is not None:
             timings["es_pnp"] = _es_pnp_time["t"]
-            timings["es_n_decoded"] = float(len(es_state["results"]))
+            timings["es_n_decoded"] = _es_decoded["n"]
         # top1 模板的稠密 desc（引导式对应精化用，solve 阶段复用）
         top_desc = {"template_idx": top_full[0], "desc_q": top_full[1],
                     "desc_t": top_full[2], "pix_t": top_full[3],

@@ -1,0 +1,12 @@
+# 早停 v2 验证档（08-16）：early_stop_fusion = 早停判定用独立 NN（省解码），
+# 收尾对解码前缀重跑融合匹配（保质量）。修复 v1 的融合依赖物体损失
+# （ape/cat/hp/phone 粗位姿 -4~-16，根因=独立 NN + 池收窄伤融合+联合 PnP）。
+base: ../current/dense80_depthc_guided.yaml
+
+matching:
+  early_stop: true
+  early_stop_fusion: true
+  early_stop_w: 2
+  early_stop_delta: 0
+  early_stop_ratio: 0.05
+  early_stop_min_k: 8

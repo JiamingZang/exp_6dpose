@@ -303,6 +303,116 @@ class Mast3rMatcher:
                         pix_t_native.copy())
         return top_full, True
 
+    def _fusion_match(self, sel, desc_cache, pix_q_all, scores,
+                     sim_threshold, cycle_tau_px, n_sample, rng
+                     ) -> List[TemplateMatch]:
+        """融合匹配（OnePose++/MixRI 零样本版）：模板侧 desc 拼接一次全局 NN。
+
+        每个查询像素与"全部池模板的前景 desc"竞争最近邻，跨模板取全局
+        最优；对应按模板归属拆回落盘。在线早停 v2（early_stop_fusion）
+        对解码前缀重跑融合，保匹配质量（v1 独立 NN 伤融合依赖物体）。
+        """
+        torch = self.torch
+        if bool(self.cfg.get("fusion", True)):
+            # ---- 融合版（OnePose++/MixRI 零样本版）：模板侧 desc 拼接，
+            # 一次全局互最近邻。desc_q 由查询图解码、对所有模板相同，只需
+            # 一份；每个查询像素与"全部 Top-K 模板的前景 desc"竞争最近邻，
+            # 跨模板取全局最优（原版逐模板独立 NN，同一查询像素可重复匹配
+            # 多个模板且各自只看局部最优）。对应按模板归属拆回落盘，下游
+            # PnP 接口不变。融合池限 fusion_topk（默认 12，与联合 PnP 的
+            # 模板数一致）：全 80 模板拼接的 desc 矩阵 ~40 万列，matmul
+            # 单块即超 6GB，易 OOM。
+            sel = sel[:int(self.cfg.get("fusion_topk", 12))]
+            dq_fg = desc_cache[sel[0]][0].to(self.device).float()
+            lens = [len(desc_cache[i][2]) for i in sel]
+            dt_fg = torch.cat(
+                [desc_cache[i][1].to(self.device).float() for i in sel],
+                dim=0)
+            pix_t_all = np.concatenate(
+                [desc_cache[i][2] for i in sel], axis=0)
+            tmpl_of = np.repeat(np.array(sel, dtype=np.int64), lens)
+            chunk = 4096
+            nn_q2t = torch.empty(len(dq_fg), dtype=torch.long,
+                                 device=self.device)
+            sims_fwd = torch.empty(len(dq_fg), dtype=torch.float32,
+                                   device=self.device)
+            best_col = torch.full((len(dt_fg),), float("-inf"),
+                                  device=self.device)
+            nn_t2q = torch.zeros(len(dt_fg), dtype=torch.long,
+                                 device=self.device)
+            for c0 in range(0, len(dq_fg), chunk):
+                sim_c = dq_fg[c0:c0 + chunk] @ dt_fg.T   # (chunk, Nt_sum)
+                nn_c = sim_c.argmax(dim=1)
+                nn_q2t[c0:c0 + chunk] = nn_c
+                sims_fwd[c0:c0 + chunk] = sim_c.gather(
+                    1, nn_c[:, None])[:, 0]
+                col_max, col_idx = sim_c.max(dim=0)
+                upd = col_max > best_col
+                best_col[upd] = col_max[upd]
+                nn_t2q[upd] = col_idx[upd] + c0
+                del sim_c
+            nn_q2t = nn_q2t.cpu().numpy()
+            nn_t2q = nn_t2q.cpu().numpy()
+            sims_fwd = sims_fwd.cpu().numpy()
+            idx_q = np.arange(len(pix_q_all))
+            keep = cycle_consistency_filter(
+                pix_q_all.astype(np.float64), idx_q, nn_q2t, nn_t2q,
+                tau_px=cycle_tau_px)
+            ok = keep & (sims_fwd > sim_threshold)
+            conf_tau_q = float(self.cfg.get("conf_tau_q",
+                                             self.cfg.get("conf_tau", 0.0)))
+            conf_tau_t = float(self.cfg.get("conf_tau_t",
+                                             self.cfg.get("conf_tau", 0.0)))
+            if conf_tau_q > 0 or conf_tau_t > 0:
+                conf_q_all = desc_cache[sel[0]][5]
+                if conf_tau_q > 0:
+                    ok = ok & (conf_q_all[idx_q] > conf_tau_q)
+                if conf_tau_t > 0:
+                    conf_t_all = np.concatenate(
+                        [desc_cache[i][6] for i in sel], axis=0)
+                    ok = ok & (conf_t_all[nn_q2t] > conf_tau_t)
+            iq, it = idx_q[ok], nn_q2t[ok]
+            ss = sims_fwd[ok]
+            for j, i in enumerate(sel):
+                m_ok = tmpl_of[it] == i
+                if m_ok.sum() == 0:
+                    continue
+                p3q_all = desc_cache[sel[0]][3]          # 查询侧 3D 与模板无关
+                if p3q_all is not None:
+                    p2, p3, ss_, p3q = sample_correspondences(
+                        pix_q_all[iq[m_ok]].astype(np.float64),
+                        pix_t_all[it[m_ok]].astype(np.float64), ss[m_ok],
+                        n_sample=n_sample, rng=rng,
+                        extras=[p3q_all[iq[m_ok]]])
+                else:
+                    p2, p3, ss_ = sample_correspondences(
+                        pix_q_all[iq[m_ok]].astype(np.float64),
+                        pix_t_all[it[m_ok]].astype(np.float64), ss[m_ok],
+                        n_sample=n_sample, rng=rng)
+                    p3q = None
+                matches.append(TemplateMatch(
+                    template_idx=i, score=float(scores[i]),
+                    pix_q=p2, pix_t=p3, sims=ss_, pts3d_q=p3q))
+            return matches, (sx, sy), scores, top_full
+
+    def _es_finalize(self, es_fusion: bool, decoded_list: List[int],
+                     desc_cache: Dict, scores: np.ndarray,
+                     matches: List[TemplateMatch], pix_q_all: np.ndarray,
+                     sim_threshold: float, cycle_tau_px: float, n_sample: int,
+                     rng, sx: float, sy: float, top_full):
+        """早停模式收尾：v1 直接返回独立 NN 前缀；v2（early_stop_fusion）
+        对解码前缀重跑融合匹配（保质量），下游 PnP 用融合结果。
+        """
+        if not es_fusion:
+            return matches, (sx, sy), scores, top_full
+        sel = [int(i) for i in decoded_list if i in desc_cache]
+        sel = sel[:int(self.cfg.get("fusion_topk", 12))]
+        if not sel:
+            return matches, (sx, sy), scores, top_full
+        return (self._fusion_match(
+            sel, desc_cache, pix_q_all, scores, sim_threshold,
+            cycle_tau_px, n_sample, rng), sx, sy, scores, top_full)
+
     def _match_one_template(self, i: int, desc_entry, pix_q_all: np.ndarray,
                             scores: np.ndarray, sim_threshold: float,
                             cycle_tau_px: float, n_sample: int, rng
@@ -460,11 +570,13 @@ class Mast3rMatcher:
             es_delta = int(self.cfg.get("early_stop_delta", 50))
             es_ratio = float(self.cfg.get("early_stop_ratio", 0.0))
             es_min_k = int(self.cfg.get("early_stop_min_k", 5))
+            es_fusion = bool(self.cfg.get("early_stop_fusion", False))
             best_inl = -1.0
             stall = 0
             decoded = 0
             top_full = None
             matches: List[TemplateMatch] = []
+            decoded_list: List[int] = []
             for i in decode_idxs:
                 i = int(i)
                 for _i, desc_q, desc_t, pts3d_q, pts3d_t, conf_q, conf_t in \
@@ -477,6 +589,7 @@ class Mast3rMatcher:
                     if not absorbed:
                         continue
                     decoded += 1
+                    decoded_list.append(i)
                     m = self._match_one_template(
                         i, desc_cache[i], pix_q_all, scores, sim_threshold,
                         cycle_tau_px, n_sample, rng)
@@ -487,9 +600,15 @@ class Mast3rMatcher:
                         w=es_w, delta=es_delta, min_k=es_min_k,
                         ratio=es_ratio)
                     if stop:
-                        return matches, (sx, sy), scores, top_full
+                        return self._es_finalize(
+                            es_fusion, decoded_list, desc_cache, scores,
+                            matches, pix_q_all, sim_threshold,
+                            cycle_tau_px, n_sample, rng, sx, sy, top_full)
                     del desc_q, desc_t
-            return matches, (sx, sy), scores, top_full
+            return self._es_finalize(
+                es_fusion, decoded_list, desc_cache, scores,
+                matches, pix_q_all, sim_threshold,
+                cycle_tau_px, n_sample, rng, sx, sy, top_full)
 
         # ---- 第一遍：待解码模板批量解码 + 打分，desc 暂存 CPU fp16 ----
         # 记录 top1 模板的稠密 desc（查询全图 + 模板前景），供 solve 阶段
@@ -525,85 +644,12 @@ class Mast3rMatcher:
             return matches, (sx, sy), scores, top_full
 
         if bool(self.cfg.get("fusion", True)):
-            # ---- 融合版（OnePose++/MixRI 零样本版）：模板侧 desc 拼接，
-            # 一次全局互最近邻。desc_q 由查询图解码、对所有模板相同，只需
-            # 一份；每个查询像素与"全部 Top-K 模板的前景 desc"竞争最近邻，
-            # 跨模板取全局最优（原版逐模板独立 NN，同一查询像素可重复匹配
-            # 多个模板且各自只看局部最优）。对应按模板归属拆回落盘，下游
-            # PnP 接口不变。融合池限 fusion_topk（默认 12，与联合 PnP 的
-            # 模板数一致）：全 80 模板拼接的 desc 矩阵 ~40 万列，matmul
-            # 单块即超 6GB，易 OOM。
+            # 融合池限 fusion_topk（默认 12，与联合 PnP 的模板数一致）：
+            # 全 80 模板拼接的 desc 矩阵 ~40 万列，matmul 单块即超 6GB。
             sel = sel[:int(self.cfg.get("fusion_topk", 12))]
-            dq_fg = desc_cache[sel[0]][0].to(self.device).float()
-            lens = [len(desc_cache[i][2]) for i in sel]
-            dt_fg = torch.cat(
-                [desc_cache[i][1].to(self.device).float() for i in sel],
-                dim=0)
-            pix_t_all = np.concatenate(
-                [desc_cache[i][2] for i in sel], axis=0)
-            tmpl_of = np.repeat(np.array(sel, dtype=np.int64), lens)
-            chunk = 4096
-            nn_q2t = torch.empty(len(dq_fg), dtype=torch.long,
-                                 device=self.device)
-            sims_fwd = torch.empty(len(dq_fg), dtype=torch.float32,
-                                   device=self.device)
-            best_col = torch.full((len(dt_fg),), float("-inf"),
-                                  device=self.device)
-            nn_t2q = torch.zeros(len(dt_fg), dtype=torch.long,
-                                 device=self.device)
-            for c0 in range(0, len(dq_fg), chunk):
-                sim_c = dq_fg[c0:c0 + chunk] @ dt_fg.T   # (chunk, Nt_sum)
-                nn_c = sim_c.argmax(dim=1)
-                nn_q2t[c0:c0 + chunk] = nn_c
-                sims_fwd[c0:c0 + chunk] = sim_c.gather(
-                    1, nn_c[:, None])[:, 0]
-                col_max, col_idx = sim_c.max(dim=0)
-                upd = col_max > best_col
-                best_col[upd] = col_max[upd]
-                nn_t2q[upd] = col_idx[upd] + c0
-                del sim_c
-            nn_q2t = nn_q2t.cpu().numpy()
-            nn_t2q = nn_t2q.cpu().numpy()
-            sims_fwd = sims_fwd.cpu().numpy()
-            idx_q = np.arange(len(pix_q_all))
-            keep = cycle_consistency_filter(
-                pix_q_all.astype(np.float64), idx_q, nn_q2t, nn_t2q,
-                tau_px=cycle_tau_px)
-            ok = keep & (sims_fwd > sim_threshold)
-            conf_tau_q = float(self.cfg.get("conf_tau_q",
-                                             self.cfg.get("conf_tau", 0.0)))
-            conf_tau_t = float(self.cfg.get("conf_tau_t",
-                                             self.cfg.get("conf_tau", 0.0)))
-            if conf_tau_q > 0 or conf_tau_t > 0:
-                conf_q_all = desc_cache[sel[0]][5]
-                if conf_tau_q > 0:
-                    ok = ok & (conf_q_all[idx_q] > conf_tau_q)
-                if conf_tau_t > 0:
-                    conf_t_all = np.concatenate(
-                        [desc_cache[i][6] for i in sel], axis=0)
-                    ok = ok & (conf_t_all[nn_q2t] > conf_tau_t)
-            iq, it = idx_q[ok], nn_q2t[ok]
-            ss = sims_fwd[ok]
-            for j, i in enumerate(sel):
-                m_ok = tmpl_of[it] == i
-                if m_ok.sum() == 0:
-                    continue
-                p3q_all = desc_cache[sel[0]][3]          # 查询侧 3D 与模板无关
-                if p3q_all is not None:
-                    p2, p3, ss_, p3q = sample_correspondences(
-                        pix_q_all[iq[m_ok]].astype(np.float64),
-                        pix_t_all[it[m_ok]].astype(np.float64), ss[m_ok],
-                        n_sample=n_sample, rng=rng,
-                        extras=[p3q_all[iq[m_ok]]])
-                else:
-                    p2, p3, ss_ = sample_correspondences(
-                        pix_q_all[iq[m_ok]].astype(np.float64),
-                        pix_t_all[it[m_ok]].astype(np.float64), ss[m_ok],
-                        n_sample=n_sample, rng=rng)
-                    p3q = None
-                matches.append(TemplateMatch(
-                    template_idx=i, score=float(scores[i]),
-                    pix_q=p2, pix_t=p3, sims=ss_, pts3d_q=p3q))
+            matches = self._fusion_match(
+                sel, desc_cache, pix_q_all, scores, sim_threshold,
+                cycle_tau_px, n_sample, rng)
             return matches, (sx, sy), scores, top_full
 
         for i in order:

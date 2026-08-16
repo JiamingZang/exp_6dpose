@@ -133,6 +133,8 @@ matching:
   # 小池下融合≈独立）。参数从离线仿真 Pareto 选点（scripts/analysis/
   # simulate_adaptive_k.py）。
   early_stop: false           # false | true
+  early_stop_fusion: false    # v2：早停判定用独立 NN（省解码），收尾对解码
+                              # 前缀重跑融合匹配（保质量，融合依赖物体不损）
   early_stop_w: 3             # 停滞窗口（连续无增益模板数）
   early_stop_delta: 50        # 内点增益阈值（绝对；0 = 任何改善即不算停滞）
   early_stop_ratio: 0.0       # 相对增益阈值（>0 时替代绝对 delta：
