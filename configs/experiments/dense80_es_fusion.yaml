@@ -10,3 +10,9 @@ matching:
   early_stop_delta: 0
   early_stop_ratio: 0.05
   early_stop_min_k: 8
+
+# 前缀内择优键：weighted（inlier×score）。离线扫描（simulate_select_key.py）
+# 5 物体一致 ≥ inlier（前缀短时加权抗"自洽错"劫持）；官方 K=40 全解码
+# 消融显示键无差别（49.33/49.50/49.50）→ 不混淆 es_nostop（K=40）对照。
+solver:
+  selection: weighted

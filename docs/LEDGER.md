@@ -56,6 +56,8 @@
 | experiments/dense80_topk_instr.yaml | done | 6d-adaptive-k-sim 数据采集档（guided + topk_best [40]）：缓存落盘逐候选 cand_*；duck/ape 采满（08-16），cat/hp/phone 链中；离线仿真 duck +3.33/ape +7.50 @ meanK~2.5 |
 | experiments/dense80_es.yaml | running | 6d-adaptive-k-sim 在线验证粗位姿档（08-16）：matching.early_stop 开（w=2/ratio=0.05/min_k=8），base guided；对比 K=40 粗位姿 49.33 |
 | experiments/dense80_es_ia.yaml | running | 6d-adaptive-k-sim 在线验证级联档（08-16）：early_stop + champion ia 级联；对比 61.20 |
+| experiments/dense80_es_nostop.yaml | running | 6d-adaptive-k-sim 对照档（08-16）：fusion off + K=40 全解码，分离"独立 NN"与"早停排除"两个混杂效应（es_nostop watcher 在 localt_off 后自动跑；hp -10.00 归因）|
+| experiments/dense80_es_fusion.yaml | running | 6d-adaptive-k-sim v2 档（08-16）：early_stop（独立 NN 判定省解码）+ 收尾前缀重跑融合匹配 + **selection: weighted**（16:20 离线扫描加注：前缀短时加权键 5 物体一致 ≥ inlier，K=40 下键中性 49.33/49.50/49.50 不混淆对照）；v2 watcher 在 es_nostop 后自动跑 |
 | experiments/dense80_fib24.yaml | done | 6d-fib24 判负（08-16）：MEAN -3.00（46.33 vs 49.33），hp -20.83 最重——120t 预筛 top-40 被自相似模板挤占；80t 饱和证实 |
 | ablations/11_joint_templates.yaml | done | 6d-ablation 第 11 组（08-14 补）：J=1 45.33 / J=5 49.33 / J=10 46.00 / J=20 45.83——J 曲线双峰（J∈{5,12} 并列），增益集中 J≤5（+4.0）；默认 J=12 与 J=5 并列最优（08-16 结案）|
 | experiments/dense80_ia_gateoff.yaml | done | 6d-ia-gateoff（08-16 结案）：gate-off 57.33 vs gate-on 61.20（-3.87）——门是保护机制（hp -15.83 全靠门挡），不阻塞真收益（duck +16.67 级联增益未被挡）|
