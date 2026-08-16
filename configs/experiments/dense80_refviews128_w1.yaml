@@ -1,0 +1,5 @@
+# 6d-refviews 深色物体（白背景）变体：n_ref_views 64 → 128，其余 champion 配方
+base: ../current/dense80_depth_w1.yaml
+
+onboard:
+  n_ref_views: 128
