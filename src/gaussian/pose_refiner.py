@@ -57,7 +57,9 @@ class PoseRefiner:
                  supersample: int = 1,
                  stage1_iters: int = 0,
                  lambda_area: float = 0.0,
-                 area_gate_dice: float = 0.0):
+                 area_gate_dice: float = 0.0,
+                 loss_mode: str = "default",
+                 early_stop_abs: float = 0.0):
         import gsplat
         from pathlib import Path
         p = Path(ckpt_path)
@@ -83,6 +85,8 @@ class PoseRefiner:
         self.stage1_iters = int(stage1_iters)
         self.lambda_area = float(lambda_area)
         self.area_gate_dice = float(area_gate_dice)
+        self.loss_mode = loss_mode
+        self.early_stop_abs = float(early_stop_abs)
 
         ck = torch.load(p, map_location=device, weights_only=False)
         self.splats = {}
@@ -217,10 +221,17 @@ class PoseRefiner:
         best_loss = float("inf")
 
         def _step_loss(R, t):
-            """单步损失：交集掩码 L1 + SSIM + MS-SSIM + 掩码形状 + 面积正则。"""
+            """单步损失。loss_mode="gs_refine" 时忠实复刻 GS-Pose 的
+            GS-Refiner（arXiv 2403.10683v2 Eq.6）：只 (1-SSIM)+(1-MS-SSIM)，
+            无 L1/掩码/面积项——绝对光度项对 3DGS 与查询间的域差是噪声
+            梯度，两项结构损失即论文消融验证的全部。"""
             composed, alpha = self._render(R, t, Kt, W, H, scale=s)
             comp = composed.permute(2, 0, 1)           # (3,H,W)
             a = alpha[..., 0]                          # (H,W)
+            if self.loss_mode == "gs_refine":
+                ssim_val = self.ssim_fn(comp[None], gt[None])
+                ms_val = self.ms_ssim_fn(comp[None], gt[None])
+                return (1.0 - ssim_val) + (1.0 - ms_val)
             ov = (a > 0.5) & (msk[0] > 0.5)
             # 交集掩码内 L1：遮挡/分割不一致区域（只有一边是前景）不参与
             # 光度对齐，避免查询掩码污染把位姿拉偏
@@ -304,6 +315,9 @@ class PoseRefiner:
             if last_loss < best_loss:
                 best_loss = last_loss
                 best_delta = delta.detach().clone()
+            # GS-Pose 式早停：loss 收敛到绝对阈值 η 即停（真对齐才停）
+            if self.early_stop_abs > 0 and last_loss < self.early_stop_abs:
+                break
             # GS-Pose 式早停：最近 N 步损失梯度均值 < 阈值
             if (self.early_stop_grad_window > 0
                     and len(losses) > self.early_stop_grad_window):

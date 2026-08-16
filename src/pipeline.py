@@ -606,7 +606,10 @@ class PoseEstimator:
                 stage1_iters=int(sc.get("refine_stage1_iters", 0)),
                 lambda_area=float(sc.get("refine_area_lambda", 0.0)),
                 area_gate_dice=float(
-                    sc.get("refine_area_gate_dice", 0.0)))
+                    sc.get("refine_area_gate_dice", 0.0)),
+                loss_mode=str(sc.get("refine_loss_mode", "default")),
+                early_stop_abs=float(
+                    sc.get("refine_early_stop_abs", 0.0)))
             # 多假设精化的轻量种子搜索器：SSIM-only 短迭代（快），只负责
             # 在扰动种子里粗筛出好盆地；最终精化仍由 LPIPS 主 refiner 完成
             if bool(sc.get("multi_hypo", False)):
@@ -618,7 +621,10 @@ class PoseEstimator:
                     lambda_lpips=0.0,
                     early_stop_patience=15,
                     early_stop_tol=float(
-                        sc.get("refine_early_stop_tol", 1e-4)))
+                        sc.get("refine_early_stop_tol", 1e-4)),
+                    loss_mode=str(sc.get("refine_loss_mode", "default")),
+                    early_stop_abs=float(
+                        sc.get("refine_early_stop_abs", 0.0)))
             else:
                 self._hypo_refiner = None
         # 定位候选渲染验证（detection.loc_verify）：3DGS 前向渲染对齐损失
@@ -1876,7 +1882,10 @@ class PoseEstimator:
                     # 精化回退保护：refiner 损失面 tz 平坦 + 旋转有梯度，
                     # 常把粗位姿推坏（实测负贡献，holepuncher 51.7→36.7）。
                     # 用渲染对齐损失比较精化前后，变差则保留粗位姿。
-                    if R_r is not None:
+                    # refine_fallback_guard: false = 忠实 GS-Pose（无保护，
+                    # 其 refiner 是纯增益，见 6d-gsrefiner）。
+                    if (bool(s_cfg.get("refine_fallback_guard", True))
+                            and R_r is not None):
                         la_before = self._refiner.align_loss(
                             chosen_ex["crop"], chosen_ex["mask_crop"],
                             K_crop, R_c, t_c)

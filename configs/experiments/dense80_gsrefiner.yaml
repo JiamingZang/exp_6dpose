@@ -1,0 +1,17 @@
+# 忠实复刻 GS-Refiner 档（6d-gsrefiner，08-16）：
+# GS-Pose 的 refiner 收益全在其损失设计（arXiv 2403.10683v2 Eq.6：
+# L_gs = L_D-SSIM + L_D-MSSIM，无任何绝对光度项/掩码项；消融证明两项
+# 即全部）。我们的 v2 抄了优化器骨架却叠加 L1(1.0)+mask(0.5)+dice(0.3)
+# +area，L1 权重最大——3DGS 与查询的光度域差使 L1 梯度是噪声（对齐损失
+# 与 ADD 相关性 ~51%、refiner 需回退保护均为其症状）。
+# 本档唯一差异 = solver.refine_* 换为论文参数：纯结构损失、lr=5e-3、
+# 绝对阈值早停 η=1e-4（"对齐好才停"，非"变平即停"）、关回退保护（论文
+# 无此机制）。粗位姿/iter_align/择优与 champion（dense80_depthc_ia）一致。
+base: ../current/dense80_depthc_ia.yaml
+
+solver:
+  refine_loss_mode: gs_refine        # 只 (1-SSIM)+(1-MS-SSIM)
+  refine_lr: 0.005                   # 论文 5e-3（默认 0.01）
+  refine_early_stop_abs: 0.0001      # 论文 η=1e-4
+  refine_early_stop_grad_window: 0   # 关"变平即停"（语义与论文相反）
+  refine_fallback_guard: false       # 关回退保护（论文 refiner 是纯增益）

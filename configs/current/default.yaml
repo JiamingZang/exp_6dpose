@@ -191,6 +191,14 @@ solver:
                                # 见 src/gaussian/pose_refiner.py）。开启需要
                                # onboard 保存 3DGS 参数（.pt）；实测 ADD/Proj
                                # 均有提升，每帧 +5.5s（评估主配置）
+  refine_loss_mode: default    # default=叠加 L1/mask/dice/area 的混合损失
+                               # | gs_refine=忠实 GS-Pose GS-Refiner（arXiv
+                               # 2403.10683v2 Eq.6：只 (1-SSIM)+(1-MS-SSIM)，
+                               # 6d-gsrefiner 验证档）
+  refine_early_stop_abs: 0.0   # >0 时启用绝对阈值早停（loss < η 即停，
+                               # GS-Pose 式"真对齐才停"；默认关）
+  refine_fallback_guard: true  # 精化回退保护（align_loss 变差保留粗位姿）；
+                               # false=忠实 GS-Pose（无保护，6d-gsrefiner）
 
 renderer:
   # 模板渲染器：3dgs（主）| pyrender_cad（消融：直接光栅化 CAD）

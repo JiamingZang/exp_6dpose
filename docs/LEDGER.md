@@ -63,6 +63,7 @@
 | ablations/11_joint_templates.yaml | done | 6d-ablation 第 11 组（08-14 补）：J=1 45.33 / J=5 49.33 / J=10 46.00 / J=20 45.83——J 曲线双峰（J∈{5,12} 并列），增益集中 J≤5（+4.0）；默认 J=12 与 J=5 并列最优（08-16 结案）|
 | experiments/dense80_ia_gateoff.yaml | done | 6d-ia-gateoff（08-16 结案）：gate-off 57.33 vs gate-on 61.20（-3.87）——门是保护机制（hp -15.83 全靠门挡），不阻塞真收益（duck +16.67 级联增益未被挡）|
 | experiments/dense80_localt_off.yaml | done | 6d-localt-off（08-16 结案，判负 -7.17）：off 档 53.83 vs ia 基线 61.00——ape/hp/phone -10~-12（触发率最高物体受损最重）、duck/cat 持平；loc_alt 备选解码是正贡献保留，代价 +2.0s/帧 53% 帧触发如实披露 |
+| experiments/dense80_gsrefiner.yaml | running | 6d-gsrefiner（08-16 登记）：忠实复刻 GS-Refiner 损失档——refine_loss_mode: gs_refine（纯 (1-SSIM)+(1-MS-SSIM)，无 L1/mask/dice/area）+ lr 5e-3 + 绝对阈值早停 η=1e-4 + 关回退保护；基线 ia 61.00，成功线 MEAN ≥ 62.00；代码：pose_refiner.py loss_mode/early_stop_abs + pipeline.py refine_fallback_guard |
 | 6d-pnp-multisol（诊断）| done | 挑战 2 判死：duck 60 帧 × 30 次 RANSAC 全单解——硬对应 + EPnP 无多解性；inlier 择优 60/60 命中；瓶颈确证候选池生成 |
 | dense80_depthc_ia_track.yaml | done | 6d-track-seed 帧间跟踪种子：duck 50.83（+3.33 vs 基线）但低于 multi 55.83；代价 +40% 不划算；仅论文视频扩展素材 |
 | dense80_depthc_ia_multirefine.yaml | done | 6d-multi-refine 种子级渲染对比优化判负：duck 49.17（-6.66 vs multi）——refiner 盆底择优失效（ADD -6.66 但 Proj +9.16）；渲染对比优化两轮判负结案 |

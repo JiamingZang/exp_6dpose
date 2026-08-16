@@ -110,3 +110,20 @@ def test_early_stop_signal_default_inlier():
     assert cfg["solver"].get("selection") == "weighted"
     cfg2 = load_config("configs/current/dense80_depthc_guided.yaml")
     assert cfg2["matching"].get("early_stop_signal", "inlier") == "inlier"
+
+
+def test_gsrefiner_config_parses():
+    """6d-gsrefiner 档：纯结构损失参数解析 + 默认档保持原行为。"""
+    cfg = load_config("configs/experiments/dense80_gsrefiner.yaml")
+    assert cfg["solver"].get("refine_loss_mode", "default") == "gs_refine"
+    assert cfg["solver"].get("refine_lr", 0.01) == 0.005
+    assert cfg["solver"].get("refine_early_stop_abs", 0.0) == 0.0001
+    assert cfg["solver"].get("refine_early_stop_grad_window", 5) == 0
+    assert cfg["solver"].get("refine_fallback_guard", True) is False
+    # base 链保持 champion 结构（iter_align 2 轮）
+    assert cfg["solver"].get("iter_align_iters", 0) == 2
+    # 默认档不受影响
+    cfg2 = load_config("configs/current/dense80_depthc_guided.yaml")
+    assert cfg2["solver"].get("refine_loss_mode", "default") == "default"
+    assert cfg2["solver"].get("refine_early_stop_abs", 0.0) == 0.0
+    assert cfg2["solver"].get("refine_fallback_guard", True) is True
