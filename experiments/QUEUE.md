@@ -7,11 +7,11 @@
 - **全量 MEAN ADD 69.74 / Proj 83.77 / 5cm5° 68.69**（14968 帧，论文主表口径）
 - 120 帧子集历史数字（71.55、duck 33.3 等）**受 cache/rng 污染事故影响，引用前须干净复跑**
 - 外部目标：GSPose 92.0；弱项 duck/ape/cat/holepuncher（全量 32.3/42.5/51.3/44.5）
-- 已结案路线（禁止回退重跑）：30k 批量重训（13 物体 3 涨 9 跌）、tz_search（面积比信号死）、NCC 亚像素（噪声主导）、supersample2、择优歧义（duck 池无好假设）、μ 混合锚点、CAD 深度监督单独用、重采样视图、统一背景色、掩码腐蚀/交叉、SAM ViT-H、稳定先验软评分、查询侧超分
+- 已结案路线（禁止回退重跑）：30k 批量重训（13 物体 3 涨 9 跌）、tz_search（面积比信号死）、NCC 亚像素（噪声主导）、supersample2、择优歧义（duck 池无好假设）、μ 混合锚点、CAD 深度监督单独用、重采样视图、统一背景色、掩码腐蚀/交叉、SAM ViT-H、稳定先验软评分、查询侧超分、**GS-Refiner 忠实复刻（40 帧验证损失面与位姿误差解耦 r=-0.16，refiner 方向整体结案）**
 
 | ID | status | priority | config | run record | question | success line | notes |
 |---|---|---:|---|---|---|---|---|
-| 6d-gsrefiner | running | 3 | `configs/experiments/dense80_gsrefiner.yaml`（champion ia + refine_loss_mode: gs_refine + lr 5e-3 + 绝对阈值早停 1e-4 + 关回退保护）| `experiments/runs/6d-gsrefiner.md` | GS-Pose refiner 收益全在纯结构损失（Eq.6 无 L1/掩码项）；我们 v2 抄了优化器却叠加 L1 主导损失 → refiner 净负。换回论文损失后能否变纯增益？| 5 弱物体 120 帧 MEAN ≥ 62.00（ia 基线 61.00 +1.0 带外）且 3/5 正 → 全量升级；< 60.00 判负 | 登记 08-16；粗位姿/iter_align 与 champion 同口径，唯一差异=refiner 损失与保护 |
+| 6d-gsrefiner | done | 3 | `configs/experiments/dense80_gsrefiner.yaml`（champion ia + refine_loss_mode: gs_refine + lr 5e-3 + 绝对阈值早停 1e-4 + 关回退保护）| `experiments/runs/6d-gsrefiner.md` | GS-Pose refiner 收益全在纯结构损失（Eq.6 无 L1/掩码项）；我们 v2 抄了优化器却叠加 L1 主导损失 → refiner 净负。换回论文损失后能否变纯增益？| 5 弱物体 120 帧 MEAN ≥ 62.00（ia 基线 61.00 +1.0 带外）且 3/5 正 → 全量升级；< 60.00 判负 | **结案（先简单验证判负，未跑全量）**：40 帧 duck 忠实损失改善 4/恶化 28（比旧损失 6/22 还差），4× 降采样 2/26；三个误差带全净负；损失-误差相关 r=-0.16——渲染比较损失面与位姿误差解耦，机制在本管线不成立；GS-Pose 增益来自弱 init 的大旋转误差，我们 iter_align 已吃掉；剩余平移病态 RGB 不可见（tz-depth 闭环）|
 | 6d-full-linemod | done | 1 | `configs/current/dense80_depthc_guided.yaml`（回退保护）| `experiments/runs/6d-full-linemod.md` | 120 帧子集 71.55 能否在全量 LineMod 保持？| 全量 13 物体完成，mean ADD/Proj/5cm5° 入 STATE | **全量 MEAN 69.74 / 83.77 / 68.69（14968 帧）**；途中发现并修复 matches 损坏（cat 399 坏帧）；见 run record |
 | 6d-refiner-v2 | done | 1 | 待改（`src/gaussian/pose_refiner.py`，配置新档位）| `experiments/runs/6d-refiner-v2.md` | 按 GS-Pose（SSIM+MS-SSIM、去 LPIPS、cosine lr 退火、edge_err 择优）+ 旧代码（mask_loss 形状主导、best-loss 回溯、多假设）重做 refiner 能否把精化从净负转正？| 120 帧子集 MEAN ≥ 71.55 且弱项（duck/ape/cat/holepuncher）任一 +5 | **判负**：cat 55.83（+4.2 唯一正）ape 45.0 持平 duck -6.6 holepuncher -5.8；duck 判据全失效（align_loss 51%）；多假设是最后机制差异待试（挂 task-2 之后） |
 | 6d-pointmap-t1 | done | 1 | 离线验证（不改管线）+ `src/solver/rigid_align.py` 新求解器 | `experiments/runs/6d-pointmap-t1.md` | MASt3R pointmap（pts3d_q 已落盘）与 coord_map 的 3D-3D 刚体对齐能否替代 PnP？| 离线：好帧 3D 残差中位 <5mm；在线：ape/duck 120 帧 ADD ≥ 裸 PnP 且 M 类（duck）提升 | **不可行**：MASt3R 成对输出统一系（img1 系），查询相机系 3D 不存在；域差 34% 判死第三档；pointmap 价值=dc2 深度一致性（在用）；**t2/t3 连带清出队列**（依赖的 t1 前提不成立）|

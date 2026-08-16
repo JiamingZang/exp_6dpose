@@ -59,7 +59,8 @@ class PoseRefiner:
                  lambda_area: float = 0.0,
                  area_gate_dice: float = 0.0,
                  loss_mode: str = "default",
-                 early_stop_abs: float = 0.0):
+                 early_stop_abs: float = 0.0,
+                 loss_downscale: int = 1):
         import gsplat
         from pathlib import Path
         p = Path(ckpt_path)
@@ -87,6 +88,7 @@ class PoseRefiner:
         self.area_gate_dice = float(area_gate_dice)
         self.loss_mode = loss_mode
         self.early_stop_abs = float(early_stop_abs)
+        self.loss_downscale = int(loss_downscale)
 
         ck = torch.load(p, map_location=device, weights_only=False)
         self.splats = {}
@@ -229,6 +231,22 @@ class PoseRefiner:
             comp = composed.permute(2, 0, 1)           # (3,H,W)
             a = alpha[..., 0]                          # (H,W)
             if self.loss_mode == "gs_refine":
+                # GS-Pose 尺度假设（6d-gsrefiner 验证）：论文在全图
+                # 480×640 上比较（物体 ~100px 级，结构损失被轮廓主导，
+                # 几何信号强）；我们的 512 裁剪 ~400px 级纹理主导，出现
+                # 外观自洽错盆地。loss_downscale>1 时降采样比较域验证。
+                if self.loss_downscale > 1:
+                    import torch.nn.functional as F
+                    ds = self.loss_downscale
+                    comp = F.interpolate(comp[None], scale_factor=1.0 / ds,
+                                         mode="bilinear",
+                                         align_corners=False)[0]
+                    gt_d = F.interpolate(gt[None], scale_factor=1.0 / ds,
+                                         mode="bilinear",
+                                         align_corners=False)[0]
+                    ssim_val = self.ssim_fn(comp[None], gt_d[None])
+                    ms_val = self.ms_ssim_fn(comp[None], gt_d[None])
+                    return (1.0 - ssim_val) + (1.0 - ms_val)
                 ssim_val = self.ssim_fn(comp[None], gt[None])
                 ms_val = self.ms_ssim_fn(comp[None], gt[None])
                 return (1.0 - ssim_val) + (1.0 - ms_val)
