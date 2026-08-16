@@ -411,7 +411,7 @@ class Mast3rMatcher:
             return matches, (sx, sy), scores, top_full
         return (self._fusion_match(
             sel, desc_cache, pix_q_all, scores, sim_threshold,
-            cycle_tau_px, n_sample, rng), sx, sy, scores, top_full)
+            cycle_tau_px, n_sample, rng), (sx, sy), scores, top_full)
 
     def _match_one_template(self, i: int, desc_entry, pix_q_all: np.ndarray,
                             scores: np.ndarray, sim_threshold: float,
@@ -538,7 +538,7 @@ class Mast3rMatcher:
 
         ys, xs = np.nonzero(q_mask)
         if len(ys) < 16:
-            return [], (sx, sy), np.full(len(self._tmpl_feats), -np.inf)
+            return [], (sx, sy), np.full(len(self._tmpl_feats), -np.inf), None
         pix_q_all = np.stack([xs, ys], axis=1)            # (Nq,2) x,y
         flat_q_all = ys * q_img.shape[1] + xs
         # 打分用下采样像素（估计 sim(m) 均值足够，控制解码显存）
