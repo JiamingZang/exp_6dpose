@@ -127,6 +127,17 @@ def template_bank_path(cfg: Dict, obj_name: str) -> Path:
 # ---------------------------------------------------------------------------
 # 离线：物体准备
 # ---------------------------------------------------------------------------
+def train_fingerprint(cfg: Dict) -> Dict:
+    """3DGS 训练配置指纹（onboard 幂等校验用）。配置任一变化 → 强制重训。"""
+    return {
+        "iterations": int(cfg["gaussian"].get("iterations", 7000)),
+        "n_ref_views": int(cfg["onboard"].get("n_ref_views", 64)),
+        "depth_l1_weight": float(cfg["gaussian"].get("depth_l1_weight", 0.0)),
+        "bg_color": float(cfg["onboard"].get("bg_color", 1.0)),
+        "anchor_mode": "invdepth",
+    }
+
+
 def onboard_object(cfg: Dict, obj_name: str, device: str = "cuda",
                    verbose: bool = True) -> Path:
     """物体准备：几何初始化 → 尺度对齐 → 3DGS → 模板库 + DINOv2 特征。
@@ -145,20 +156,14 @@ def onboard_object(cfg: Dict, obj_name: str, device: str = "cuda",
     # 训练指纹与配置一致才跳过。指纹不一致（迭代数/参考帧数/深度监督/
     # 锚点渲染方式/背景色等变了）必须重训——文件名不含这些参数，静默
     # 复用旧库会让"改了配置但没生效"（30k 迭代事故，08-04）。
-    def _train_fingerprint(cfg_):
-        return {
-            "iterations": int(cfg_["gaussian"].get("iterations", 7000)),
-            "n_ref_views": int(cfg_["onboard"].get("n_ref_views", 64)),
-            "depth_l1_weight": float(cfg_["gaussian"].get("depth_l1_weight", 0.0)),
-            "bg_color": float(cfg_["onboard"].get("bg_color", 1.0)),
-            "anchor_mode": "invdepth",
-        }
-
-    fp_cfg = _train_fingerprint(cfg)
+    fp_cfg = train_fingerprint(cfg)
     if out_path.exists() and out_path.with_suffix(".pt").exists():
         stale = None
         try:
-            with np.load(out_path, allow_pickle=False) as d:
+            # train_fp 是 object 数组（np.array({...})），allow_pickle=False
+            # 读不了 → 跳过路径曾是死代码（每次必重训，08-17 发现）。bank
+            # 是自家 onboard 产物，非不可信输入，开 allow_pickle 安全。
+            with np.load(out_path, allow_pickle=True) as d:
                 if "train_fp" in d:
                     raw = d["train_fp"].item()
                     fp_bank = {k: float(v) if hasattr(v, "item")
@@ -171,12 +176,16 @@ def onboard_object(cfg: Dict, obj_name: str, device: str = "cuda",
                 stale = "train_fp 缺失（旧库，无法确认配置）"
             else:
                 for k, v in fp_cfg.items():
-                    if k in fp_bank and abs(float(fp_bank[k]) - float(v)) > 1e-9:
+                    if k not in fp_bank:
+                        continue
+                    if k == "anchor_mode":
+                        if str(fp_bank[k]) != str(v):
+                            stale = f"{k}: bank={fp_bank[k]} cfg={v}"
+                            break
+                        continue
+                    if abs(float(fp_bank[k]) - float(v)) > 1e-9:
                         stale = f"{k}: bank={fp_bank[k]} cfg={v}"
                         break
-                if stale is None and "anchor_mode" in fp_bank:
-                    if str(fp_bank["anchor_mode"]) != "invdepth":
-                        stale = "anchor_mode 非 invdepth"
         except Exception:      # noqa: BLE001
             stale = "train_fp 读取失败"
         if stale is None:
@@ -278,13 +287,7 @@ def onboard_object(cfg: Dict, obj_name: str, device: str = "cuda",
     bank["bg_color"] = np.float32(float(cfg["onboard"].get("bg_color", 1.0)))
     # 训练指纹（幂等校验用，见 onboard_object 开头）：配置变了强制重训，
     # 不静默复用旧库
-    bank["train_fp"] = np.array({
-        "iterations": int(cfg["gaussian"].get("iterations", 7000)),
-        "n_ref_views": int(cfg["onboard"].get("n_ref_views", 64)),
-        "depth_l1_weight": float(cfg["gaussian"].get("depth_l1_weight", 0.0)),
-        "bg_color": float(cfg["onboard"].get("bg_color", 1.0)),
-        "anchor_mode": "invdepth",
-    })
+    bank["train_fp"] = np.array(train_fingerprint(cfg))
     # ---- 8. VGGT 路线：重建系→CAD 系相似变换（仅评测对齐）----
     if recon_for_align is not None and ds.model_path.exists():
         cad_verts, _, _ = load_ply(ds.model_path)

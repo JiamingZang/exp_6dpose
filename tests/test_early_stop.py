@@ -127,3 +127,48 @@ def test_gsrefiner_config_parses():
     assert cfg2["solver"].get("refine_loss_mode", "default") == "default"
     assert cfg2["solver"].get("refine_early_stop_abs", 0.0) == 0.0
     assert cfg2["solver"].get("refine_fallback_guard", True) is True
+
+
+def test_train_fp_roundtrip_and_match():
+    """onboard 训练指纹：写（object 数组）→ 读（allow_pickle=True）→
+    匹配判定。回归 08-17 bug：allow_pickle=False 读不了 object 数组 +
+    anchor_mode 字符串被 float() 强转 → 跳过路径死代码（每次必重训）。"""
+    import numpy as np, tempfile, os
+    from src.pipeline import train_fingerprint
+    from src.config import load_config
+    cfg = load_config("configs/experiments/dense80_refviews128.yaml")
+    fp_cfg = train_fingerprint(cfg)
+    assert fp_cfg["n_ref_views"] == 128 and fp_cfg["anchor_mode"] == "invdepth"
+    with tempfile.TemporaryDirectory() as td:
+        p = os.path.join(td, "bank.npz")
+        np.savez(p, train_fp=np.array(fp_cfg))
+        with np.load(p, allow_pickle=True) as d:
+            raw = d["train_fp"].item()
+        stale = None
+        for k, v in fp_cfg.items():
+            if k not in raw:
+                continue
+            if k == "anchor_mode":
+                if str(raw[k]) != str(v):
+                    stale = True
+                    break
+                continue
+            if abs(float(raw[k]) - float(v)) > 1e-9:
+                stale = True
+                break
+        assert stale is None, "同配置指纹应判一致（跳过）"
+    # 反例：视图数不同必须判不一致
+    fp2 = dict(fp_cfg, n_ref_views=64)
+    stale = None
+    for k, v in fp_cfg.items():
+        if k not in fp2:
+            continue
+        if k == "anchor_mode":
+            if str(fp2[k]) != str(v):
+                stale = True
+                break
+            continue
+        if abs(float(fp2[k]) - float(v)) > 1e-9:
+            stale = True
+            break
+    assert stale is True, "不同视图数必须强制重训"
