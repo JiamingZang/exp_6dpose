@@ -29,14 +29,14 @@
 ## Commands
 
 ```bash
-# 120t 库 onboard（续链自动，11:37-11:53）
-python3 -c "from src.config import load_config; from src.pipeline import onboard_object; cfg=load_config('configs/experiments/dense80_fib24.yaml'); onboard_object(cfg, '<obj>')"
+# 120t 库 onboard（续链自动，11:37-11:53）；CFG 变量避免路径与引号相邻
+CFG=configs/experiments/dense80_fib24.yaml
+python3 -c "from src.config import load_config; from src.pipeline import onboard_object; cfg=load_config('$CFG'); onboard_object(cfg, '<obj>')"
 # 评测
 python3 scripts/eval/run_linemod.py --config configs/experiments/dense80_fib24.yaml \
     --objects duck ape cat holepuncher phone --max-frames 120 \
     --cache-dir outputs/exp_fib24/cache --out outputs/exp_fib24/result.json
 ```
-（注：check_state 解析 run record 中的路径时会把单引号带进去，上面 load_config 行的引号是 python 语法所需；路径本体见 Protocol 表。）
 
 ## Live Log
 
