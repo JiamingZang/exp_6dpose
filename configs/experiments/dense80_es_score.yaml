@@ -1,0 +1,19 @@
+# 早停 v2.1 验证档（08-16）：v2（es_fusion.yaml，min_k=12+weighted）之后跑。
+#   v2.1 = v2 + early_stop_signal: score（停表信号换 MASt3R 匹配分数）：
+#   离线（17:15/20:15 扫描，同缓存）mk=12 下 score-plateau MEAN 43.8 vs
+#   inlier-plateau 41.8（+2.0：duck +5.8 / hp +4.2——inlier 停表被"自洽地
+#   错"高内点候选污染，score 正确反映候选质量）。回调 PnP 仍跑（es_reuse
+#   需要其结果），只换 plateau 信号。
+#   决策口径 = 级联层（champion ia 基线 61.00）。
+base: ../current/dense80_depthc_ia.yaml
+
+matching:
+  early_stop: true
+  early_stop_signal: score
+  early_stop_w: 2
+  early_stop_delta: 0
+  early_stop_ratio: 0.05
+  early_stop_min_k: 12
+
+solver:
+  selection: weighted

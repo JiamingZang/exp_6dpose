@@ -98,3 +98,15 @@ def test_early_stop_requires_dinov2_ranking():
     # prescreen=none+dinov2：非法组合显式 raise（既有纪律）
     with pytest.raises(ValueError):
         resolve_prefilter_order("none", "dinov2", order)
+
+
+def test_early_stop_signal_default_inlier():
+    """停表信号默认 inlier；score 档显式解析（v2.1，20:15 实现）。"""
+    from src.config import load_config
+    cfg = load_config("configs/experiments/dense80_es_score.yaml")
+    assert cfg["matching"].get("early_stop_signal", "inlier") == "score"
+    assert cfg["matching"].get("early_stop_min_k") == 12
+    assert cfg["matching"].get("early_stop_ratio") == 0.05
+    assert cfg["solver"].get("selection") == "weighted"
+    cfg2 = load_config("configs/current/dense80_depthc_guided.yaml")
+    assert cfg2["matching"].get("early_stop_signal", "inlier") == "inlier"

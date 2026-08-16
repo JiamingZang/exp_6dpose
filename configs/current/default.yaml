@@ -135,6 +135,9 @@ matching:
   early_stop: false           # false | true
   early_stop_fusion: false    # v2：早停判定用独立 NN（省解码），收尾对解码
                               # 前缀重跑融合匹配（保质量，融合依赖物体不损）
+  early_stop_signal: inlier   # 停表信号：inlier（回调 PnP 内点）| score
+                              # （MASt3R 匹配分数；17:15 离线 mk=12 下
+                              # MEAN +2.0——inlier 被自洽错候选虚高）
   early_stop_w: 3             # 停滞窗口（连续无增益模板数）
   early_stop_delta: 50        # 内点增益阈值（绝对；0 = 任何改善即不算停滞）
   early_stop_ratio: 0.0       # 相对增益阈值（>0 时替代绝对 delta：

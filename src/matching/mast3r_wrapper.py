@@ -576,6 +576,11 @@ class Mast3rMatcher:
             es_ratio = float(self.cfg.get("early_stop_ratio", 0.0))
             es_min_k = int(self.cfg.get("early_stop_min_k", 5))
             es_fusion = bool(self.cfg.get("early_stop_fusion", False))
+            # 停表信号：inlier（默认）= 回调 PnP 内点（被"自洽地错"虚高
+            # 污染）；score = MASt3R 匹配分数（17:15 离线：mk=12 下 MEAN
+            # +2.0，duck +5.8/hp +4.2）。回调仍调用（es_reuse 需要其 PnP
+            # 结果），只换 plateau 信号。
+            es_signal = str(self.cfg.get("early_stop_signal", "inlier"))
             best_inl = -1.0
             stall = 0
             decoded = 0
@@ -599,7 +604,11 @@ class Mast3rMatcher:
                         i, desc_cache[i], pix_q_all, scores, sim_threshold,
                         cycle_tau_px, n_sample, rng)
                     matches.append(m)
-                    inl = per_template_cb(m, sx, sy)
+                    if es_signal == "score":
+                        inl = float(m.score) if m.score is not None else None
+                        per_template_cb(m, sx, sy)
+                    else:
+                        inl = per_template_cb(m, sx, sy)
                     best_inl, stall, stop = plateau_step(
                         best_inl, stall, decoded, inl,
                         w=es_w, delta=es_delta, min_k=es_min_k,
