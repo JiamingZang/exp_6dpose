@@ -14,9 +14,13 @@ key 语义（与 rerank_selection.py / selection.py 对齐）：
   rank           = 解码序最前（DINOv2 相似度最高）
   oracle         = 前缀内 GT-ADD 最优（上界，不现实）
 
+--floor 加"弱前缀不早停"门：前缀内当前最优内点 < floor 时禁止停
+（plateau 信号在弱前缀里是噪声——hp 类正确候选排深，见 6d-adaptive-k）。
+通用单参数，无逐物体调参。
+
 用法：
   python3 scripts/analysis/simulate_select_key.py \
-      --cache outputs/exp_adaptive_k/<obj>.jsonl --object <obj>
+      --cache outputs/exp_adaptive_k/<obj>.jsonl --object <obj> [--floor 0]
 """
 import argparse
 import json
@@ -81,7 +85,7 @@ def run(args):
                  (3, None, 0.10, 5),   # 仿真最优档
                  (3, 50, None, 5),
                  (5, None, 0.05, 8))]
-    print(f"[key] object={args.object} frames={len(ids)}")
+    print(f"[key] object={args.object} frames={len(ids)} floor={args.floor}")
     print(f"{'rule':>22} | " + " ".join(f"{k:>8}" for k in KEYS) + " |  meanK")
     for w, delta, ratio, min_k in rules:
         rname = (f"abs{delta}" if delta is not None
@@ -121,7 +125,7 @@ def run(args):
                     stall = 0
                 else:
                     stall += 1
-                    if i >= min_k and stall >= w:
+                    if i >= min_k and stall >= w and best_inl >= args.floor:
                         k_used = i - stall
                         break
             ksum += k_used
@@ -149,6 +153,8 @@ def main():
     ap.add_argument("--cache", required=True)
     ap.add_argument("--object", required=True)
     ap.add_argument("--max-frames", type=int, default=120)
+    ap.add_argument("--floor", type=float, default=0.0,
+                    help="弱前缀不早停门：最优内点 < floor 时禁止停")
     args = ap.parse_args()
     sys.exit(run(args))
 
