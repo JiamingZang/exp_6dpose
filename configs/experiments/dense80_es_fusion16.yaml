@@ -1,0 +1,12 @@
+# 早停 v2-min16 变体（08-16 备用）：min_k=16 提高解码预算，
+# 覆盖 hp 类"正确候选排 9-20 位"的物体；融合收尾保质量。
+# 仅在对照档表明"池大小是主因"时启用（解码 40→16，~1.5× 延迟收益）。
+base: ../current/dense80_depthc_guided.yaml
+
+matching:
+  early_stop: true
+  early_stop_fusion: true
+  early_stop_w: 2
+  early_stop_delta: 0
+  early_stop_ratio: 0.05
+  early_stop_min_k: 16
