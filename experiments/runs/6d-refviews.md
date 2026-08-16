@@ -60,7 +60,7 @@ python3 scripts/eval/run_linemod.py --config configs/current/dense80_depthc_ia.y
 
 - 结论：`passed`（远超成功线 +3）
 - 原因：cat 7000/128v 现代配方 +15.83——视图数/现代配方是训练侧第一个正的大杠杆（此前 30k 全配方在 cat 上是跌的 → 迭代数是 30k 的毒药，视图/锚点/深度监督是收益源，待归因对照分离）
-- 下一步：扩 9 物体（benchvise/can/eggbox/glue/iron/lamp/phone + cam/driller）按 7000/128v 现代配方重训 → 全 13 物体全量评测 → 新 champion MEAN；归因对照（cat 64v 现代配方）排后
+- 下一步：扩 9 物体已重训 → 子集门控（进行中）→ 全量评测 → 新 champion MEAN；**尾项探针：duck/ape/hp 30k→7000/128v**（若 7000 配方对保留三物体也更好，champion 再升一档；迭代数归因闭环）；归因对照（cat 64v 现代配方）排最后
 
 ## Sync Checklist
 
