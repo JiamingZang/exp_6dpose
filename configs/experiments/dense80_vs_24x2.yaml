@@ -1,0 +1,8 @@
+# 6d-viewstruct V3（08-18）：fibonacci 24×2 = 48 模板——roll 180° 保险档
+# （V2 之上保留二折 roll，覆盖背面翻转类混淆的查询）。
+base: ../current/dense80_depthc_ia.yaml
+
+templates:
+  viewpoint_mode: fibonacci
+  n_viewpoints: 24
+  n_inplane: 2

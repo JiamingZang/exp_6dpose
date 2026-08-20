@@ -1,0 +1,8 @@
+# 6d-viewstruct V2（08-18）：fibonacci 24×1 = 24 模板——视角 +50%、
+# 零 roll 冗余、全解码（比 champion 40 解码更便宜）。
+base: ../current/dense80_depthc_ia.yaml
+
+templates:
+  viewpoint_mode: fibonacci
+  n_viewpoints: 24
+  n_inplane: 1

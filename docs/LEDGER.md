@@ -63,7 +63,8 @@
 | ablations/11_joint_templates.yaml | done | 6d-ablation 第 11 组（08-14 补）：J=1 45.33 / J=5 49.33 / J=10 46.00 / J=20 45.83——J 曲线双峰（J∈{5,12} 并列），增益集中 J≤5（+4.0）；默认 J=12 与 J=5 并列最优（08-16 结案）|
 | experiments/dense80_ia_gateoff.yaml | done | 6d-ia-gateoff（08-16 结案）：gate-off 57.33 vs gate-on 61.20（-3.87）——门是保护机制（hp -15.83 全靠门挡），不阻塞真收益（duck +16.67 级联增益未被挡）|
 | experiments/dense80_localt_off.yaml | done | 6d-localt-off（08-16 结案，判负 -7.17）：off 档 53.83 vs ia 基线 61.00——ape/hp/phone -10~-12（触发率最高物体受损最重）、duck/cat 持平；loc_alt 备选解码是正贡献保留，代价 +2.0s/帧 53% 帧触发如实披露 |
-| experiments/dense80_refviews128.yaml | running | 6d-refviews（08-17 登记）：训练参考视图数 64→128 隔离探针——30k 实验混杂了迭代数与视图数，保留 3 物体（duck/ape/hp）是 30k+128v 全配方、其余 10 物体旧世代 7000/64v（无 train_fp）；cat 7000/128v 现代配方 vs 基线 64.17，成功线 +3 扩 9 物体；bank 已备份 .viewsbak |
+| experiments/dense80_refviews128.yaml | done | 6d-refviews 结案（08-20）：**新 champion MEAN ADD 79.66 / Proj 88.54 / 5cm5° 82.58（14968 帧，较 78.07 +1.59）**——128v 配方全量兑现：cat +6.64 / benchvise +4.87 / hp +2.56（干净口径）/ iron +2.57 / lamp +2.24 / can +1.77 / glue +0.52 / driller +0.44 / eggbox +0.34 / phone +0.08 / cam -0.53（噪声带）；零回退；保留物体一致性 2/3 精确（hp 旧库污染已记录）；run record 见 6d-refviews.md |
+| experiments/dense80_refviews128.yaml（trio 档）| done | 6d-trio 结案（08-20）：**迭代数影响物体相关**——duck 7000 全量 49.58（+4.03）升级、ape 持平（-0.83）、hp 7000 更差（-9.16）保留 30k；30k 时代保留三物体的决定对 hp 正确；decode-all 搭车三物体全负/平（预筛 top-40 截断验证通过，非杠杆）；ape/hp 库恢复 .30k128bak；duck 正式切 7000/128v；champion 帧加权 MEAN 79.66→79.98 |
 | experiments/dense80_gsrefiner.yaml | done | 6d-gsrefiner 判负结案（08-17，先简单验证未跑全量）：40 帧 duck 忠实 GS-Refiner 损失改善 4/恶化 28（旧损失 6/22，更差）；4× 降采样 2/26；三个误差带全净负；损失-误差相关 r=-0.16——渲染比较损失面与位姿误差解耦（"自洽地错"是损失面系统性属性）；GS-Pose 的 +36.5 来自弱 init 的大旋转误差，iter_align 已吃掉；剩余单目平移病态 RGB 不可见（tz-depth 闭环）；refiner 方向整体结案（代码：loss_mode/early_stop_abs/loss_downscale/refine_fallback_guard 保留作消融档）|
 | 6d-pnp-multisol（诊断）| done | 挑战 2 判死：duck 60 帧 × 30 次 RANSAC 全单解——硬对应 + EPnP 无多解性；inlier 择优 60/60 命中；瓶颈确证候选池生成 |
 | dense80_depthc_ia_track.yaml | done | 6d-track-seed 帧间跟踪种子：duck 50.83（+3.33 vs 基线）但低于 multi 55.83；代价 +40% 不划算；仅论文视频扩展素材 |
@@ -92,3 +93,6 @@
 - 现状：`inlier`（src/solver/selection.py:49，原始内点数 + 重投影二级排序
   见 ransac_pnp.py:160-163）
 - 候选：`inlier_ratio`（selection.py:50-52 已实现，未启用）→ 消融 6 加一行
+| experiments/dense80_refviews64_ctl.yaml | done | 6d-refviews64-ctl 归因结案（08-20）：cat 64v 现代配方 67.50——视图数贡献 +12.50（79%）、现代配方（锚点/深度） +3.33（21%）；**视图数是 refviews 增益主因**；cat 128v 库已从 .v128bak 恢复 |
+| experiments/dense80_vs_16x1.yaml / 24x1.yaml / 24x2.yaml | done | 6d-viewstruct 结案（08-21，判死）：fibonacci 模式 roll 冗余=真实检索覆盖（与 cube8 消融结论不迁移）；V1 -4.17 / V2 -4.50 / V3 +0.50（边际不采纳）；ape/hp 对 roll 极敏感（-10.8）；次级发现 duck 24×2 +5.83（24 视角有益，可单物体确认）；champion 维持 80t（16×5）|
+| experiments/dense80_fillnorm.yaml | running | 6d-fillnorm（08-17 登记）：查询-模板填充归一化——模板 41% vs 查询 72%（1.75× 尺度差），match_fill_norm=0.41 缩放查询裁剪对齐尺度；代码 = pipeline fill-norm 块（α 并入 s_leg 链）+ _apply_fill_scale（K_crop 前两行乘 α，11 处）+ test_fill_norm.py 5 例；弱 5 物体 120 帧子集对照跑中（基线同口径干净复跑）|

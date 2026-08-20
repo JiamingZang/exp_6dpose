@@ -1,0 +1,12 @@
+# 6d-refviews decode-all 重验（08-18，搭 6d-trio 车）：DINOv2 预筛截断
+# top-40（80 模板只解码 CLS 最近 40 个）"≈ 全解码"的验证是在旧 64v 库上
+# 做的；新 128v 库下弱物体可能被预筛切掉正确模板（池空帧的模板可能被
+# 截）。本档：跳过 DINOv2 预筛、解码全部 80 模板（top_k=80）。
+# 基 = ia 冠军评测配置（含 iter_align 级联，与 trio 子集同口径可比）；
+# 与 dense80_depthc_ia.yaml 唯一差异 = matching 两键。
+base: ../current/dense80_depthc_ia.yaml
+
+matching:
+  template_prescreen: none
+  template_ranking: mast3r   # prescreen=none 强制：Top-K 按 MASt3R sim(m) 选
+  top_k: 80

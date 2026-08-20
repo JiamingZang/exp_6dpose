@@ -17,7 +17,7 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import numpy as np
 import torch
@@ -74,6 +74,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/default.yaml")
     ap.add_argument("--n-viewpoints", type=int, default=16)
+    ap.add_argument("--n-inplane", type=int, default=None,
+                    help="平面内旋转数覆盖（默认沿用 config；6d-viewstruct 用）")
     ap.add_argument("--viewpoint-mode", default="fibonacci",
                     help="密档用 fibonacci（cube8 模式强制 8 视角）")
     ap.add_argument("--objects", nargs="*", default=None)
@@ -86,6 +88,7 @@ def main():
     objects = args.objects or cfg["dataset"]["objects"]
     bg = float(cfg["onboard"].get("bg_color", 1.0))
     orig_n = int(cfg["templates"]["n_viewpoints"])
+    orig_inplane = int(cfg["templates"].get("n_inplane", 5))
     orig_mode = str(cfg["templates"]["viewpoint_mode"])
 
     from src.gaussian.template_renderer import render_template_bank
@@ -102,10 +105,13 @@ def main():
 
         cfg["templates"]["n_viewpoints"] = args.n_viewpoints
         cfg["templates"]["viewpoint_mode"] = args.viewpoint_mode
+        if args.n_inplane is not None:
+            cfg["templates"]["n_inplane"] = args.n_inplane
         new_path = template_bank_path(cfg, obj)          # 80t（新文件名）
         if new_path.exists() and not args.force:
             cfg["templates"]["n_viewpoints"] = orig_n    # 恢复，下次循环仍用旧路径
             cfg["templates"]["viewpoint_mode"] = orig_mode
+            cfg["templates"]["n_inplane"] = orig_inplane
             print(f"[densify:{obj}] 已存在，跳过: {new_path}")
             continue
 
@@ -140,6 +146,7 @@ def main():
 
         cfg["templates"]["n_viewpoints"] = orig_n        # 恢复，后续物体用旧路径
         cfg["templates"]["viewpoint_mode"] = orig_mode
+        cfg["templates"]["n_inplane"] = orig_inplane
 
 
 if __name__ == "__main__":

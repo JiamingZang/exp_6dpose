@@ -1,0 +1,8 @@
+# 6d-viewstruct V1（08-18）：fibonacci 16×1 = 16 模板——去 roll 冗余
+# （champion 视角数不变，n_inplane 5→1；解码数 40→16 更便宜）。
+base: ../current/dense80_depthc_ia.yaml
+
+templates:
+  viewpoint_mode: fibonacci
+  n_viewpoints: 16
+  n_inplane: 1

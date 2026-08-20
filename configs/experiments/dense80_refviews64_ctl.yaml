@@ -1,0 +1,9 @@
+# 6d-refviews 归因对照：64 视图 + 现代配方（invdepth 锚点 + depth 0.6）
+# 与 128v 探针（cat 80.00）唯一差异 = n_ref_views。
+# 若 64v-modern ≈ 80.00 → 收益来自锚点/深度监督（视图数无关）；
+# 若 ≈ 64.17（旧世代）→ 收益来自视图数。全程须在全量评测之后跑
+# （会覆盖 cat 的 128v bank，先备份 .v128bak）。
+base: ../current/dense80_depth_bg0.yaml
+
+onboard:
+  n_ref_views: 64
