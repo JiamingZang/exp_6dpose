@@ -1,0 +1,12 @@
+# 6d-fill-norm（08-17）：查询-模板填充比例归一化。
+# 问题：模板库物体填充约 41%（radius=2.5·diag, FOV 40°），查询 bbox+20%
+# 裁剪填充约 72%——MASt3R patch 匹配在 ~1.75× 尺度差下工作（#52 前提，
+# 实测 71.7% 恒定填充，与 1.75× 不匹配）。本档把查询裁剪缩放到目标填充
+# 0.41（match_fill_norm），使查询/模板匹配时物体像素尺度对齐。
+# 缩放并入 s_leg 链（主 PnP 自动吸收），下游 K_crop 经 fill_scale 修正
+# （pipeline._apply_fill_scale，11 处）。
+# 基 = ia 冠军评测配置；与 dense80_depthc_ia.yaml 唯一差异 = matching 一键。
+base: ../current/dense80_depthc_ia.yaml
+
+matching:
+  match_fill_norm: 0.41

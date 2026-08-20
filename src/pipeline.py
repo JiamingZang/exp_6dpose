@@ -771,6 +771,35 @@ class PoseEstimator:
             crop, mask_crop, s_sr = upscale_crop(crop, mask_crop, mode=sr)
             s_leg_x *= s_sr
             s_leg_y *= s_sr
+        # ---- 查询裁剪填充归一化（6d-fill-norm）----
+        # 模板库物体填充约 41%（radius=2.5·diag, FOV 40°），查询 bbox+20%
+        # 裁剪填充约 72%——两图物体像素尺度差 ~1.75×，MASt3R patch 匹配
+        # 对尺度敏感。按 mask bbox 最大边 / 裁剪最大边测当前填充，缩放到
+        # match_fill_norm 目标值，使查询/模板匹配时物体尺度对齐。缩放并入
+        # s_leg 链（同 sr，主 PnP 自动吸收），下游 K_crop 经 fill_scale 修正。
+        fill_scale = 1.0
+        fn = float(m_cfg.get("match_fill_norm", 0.0) or 0.0)
+        if fn > 0:
+            ys, xs = np.nonzero(mask_crop)
+            if len(xs) >= 16:
+                cur = (max(xs.max() - xs.min() + 1,
+                           ys.max() - ys.min() + 1)
+                       / max(crop.shape[1], crop.shape[0]))
+                alpha = min(max(fn / max(cur, 1e-6), 0.2), 5.0)
+                if abs(alpha - 1.0) > 1e-3:
+                    import cv2
+                    nw = max(int(round(crop.shape[1] * alpha)), 8)
+                    nh = max(int(round(crop.shape[0] * alpha)), 8)
+                    crop = cv2.resize(
+                        crop, (nw, nh),
+                        interpolation=(cv2.INTER_AREA if alpha < 1.0
+                                       else cv2.INTER_LINEAR))
+                    mask_crop = cv2.resize(
+                        mask_crop.astype(np.uint8), (nw, nh),
+                        interpolation=cv2.INTER_NEAREST).astype(bool)
+                    s_leg_x *= alpha
+                    s_leg_y *= alpha
+                fill_scale = alpha
         if crop.size == 0 or mask_crop.sum() < 16:
             return None
 
@@ -898,6 +927,7 @@ class PoseEstimator:
         return {"loc": loc, "crop": crop, "mask_crop": mask_crop,
                 "crop_box_used": crop_box_used,
                 "s_leg": (s_leg_x, s_leg_y),
+                "fill_scale": fill_scale,
                 "matches": matches, "sxy": (sx, sy),
                 "top_desc": top_desc,
                 "alts": alts, "timings": timings,
@@ -908,6 +938,21 @@ class PoseEstimator:
                     if prefilter_order is not None else None)}
 
     # ------------------------------------------------------------------
+    def _apply_fill_scale(self, ex: Dict, K_crop: np.ndarray) -> np.ndarray:
+        """fill-norm 缩放后的裁剪系内参修正：前两行乘 fill_scale。
+
+        裁剪内容被 match_fill_norm 缩放 α 后，裁剪系像素坐标整体乘 α，
+        内参 (fx, fy, cx, cy) 同乘 α 才保持投影等价（第三行 1 不动）。
+        未启用 fill-norm（fill_scale=1.0）时原样返回。
+        """
+        fs = float(ex.get("fill_scale", 1.0))
+        if fs == 1.0:
+            return K_crop
+        K2 = K_crop.copy()
+        K2[0] *= fs
+        K2[1] *= fs
+        return K2
+
     def _pnp_one(self, m, ex: Dict, K_query: np.ndarray,
                  corr_list: List, results: List):
         """单模板：像素反变换 → 3D 锚点提升 → RANSAC-PnP。
@@ -1267,6 +1312,7 @@ class PoseEstimator:
         K_crop = K_query.copy()
         K_crop[0, 2] -= x0
         K_crop[1, 2] -= y0
+        K_crop = self._apply_fill_scale(ex, K_crop)
         q_img, (sx, sy) = _resize_to_multiple16(
             ex["crop"], self.matcher.long_side)
         K512 = K_crop.copy()
@@ -1395,6 +1441,7 @@ class PoseEstimator:
         K_crop = K_query.copy()
         K_crop[0, 2] -= x0
         K_crop[1, 2] -= y0
+        K_crop = self._apply_fill_scale(ex, K_crop)
         from .matching.correspondence import guided_local_matching
         Rc, tc = np.asarray(R, dtype=np.float64), np.asarray(t, dtype=np.float64)
         r_now = radius
@@ -1534,6 +1581,7 @@ class PoseEstimator:
             K_crop = K_query.copy()
             K_crop[0, 2] -= x0
             K_crop[1, 2] -= y0
+            K_crop = self._apply_fill_scale(ex, K_crop)
             sel_n = int(s_cfg.get("render_select_n", 5))
             ranked = rank_candidates(
                 results, strategy=s_cfg.get("selection", "inlier"))
@@ -1558,6 +1606,7 @@ class PoseEstimator:
             K_crop = K_query.copy()
             K_crop[0, 2] -= x0
             K_crop[1, 2] -= y0
+            K_crop = self._apply_fill_scale(ex, K_crop)
             iou_min = float(s_cfg.get("render_select_min", 0.4))
             iou_best = self._verifier.mask_iou(best.R, best.t, K_crop,
                                                ex["mask_crop"])
@@ -1609,6 +1658,7 @@ class PoseEstimator:
                     K_crop = K_query.copy()
                     K_crop[0, 2] -= x0
                     K_crop[1, 2] -= y0
+                    K_crop = self._apply_fill_scale(ex, K_crop)
                     l_cur = self._verifier.align_loss(
                         ex["crop"], ex["mask_crop"], K_crop,
                         best.R, best.t)
@@ -1639,6 +1689,7 @@ class PoseEstimator:
                 K_crop = K_query.copy()
                 K_crop[0, 2] -= x0
                 K_crop[1, 2] -= y0
+                K_crop = self._apply_fill_scale(ex, K_crop)
                 l_pnp = self._verifier.align_loss(
                     ex["crop"], ex["mask_crop"], K_crop, best.R, best.t)
                 l_geo = self._verifier.align_loss(
@@ -1667,6 +1718,7 @@ class PoseEstimator:
                     K_crop = K_query.copy()
                     K_crop[0, 2] -= x0
                     K_crop[1, 2] -= y0
+                    K_crop = self._apply_fill_scale(cex, K_crop)
                     loss = self._verifier.align_loss(
                         cex["crop"], cex["mask_crop"], K_crop, r.R, r.t)
                     if loss < best_loss:
@@ -1710,6 +1762,7 @@ class PoseEstimator:
                 K_crop = K_query.copy()
                 K_crop[0, 2] -= x0
                 K_crop[1, 2] -= y0
+                K_crop = self._apply_fill_scale(chosen_ex, K_crop)
                 l_before = self._verifier.align_loss(
                     chosen_ex["crop"], chosen_ex["mask_crop"], K_crop,
                     R_c, t_c)
@@ -1784,6 +1837,7 @@ class PoseEstimator:
                     K_crop = K_query.copy()
                     K_crop[0, 2] -= x0
                     K_crop[1, 2] -= y0
+                    K_crop = self._apply_fill_scale(chosen_ex, K_crop)
                     if (seed_rf > 0 and self._refiner is not None):
                         R_r, t_r = self._refiner.refine(
                             chosen_ex["crop"], chosen_ex["mask_crop"],
@@ -1856,6 +1910,7 @@ class PoseEstimator:
             K_crop = K_query.copy()
             K_crop[0, 2] -= x0
             K_crop[1, 2] -= y0
+            K_crop = self._apply_fill_scale(chosen_ex, K_crop)
             # 任务 3 自适应（solver.adaptive）：按内点数分级——高内点 =
             # 位姿已可靠，跳过 refiner 直接输出（省 ~7s/帧）；低内点 =
             # 困难帧，refiner 迭代 boost_iters 倍（升级档）。
@@ -1922,6 +1977,7 @@ class PoseEstimator:
             K_crop = K_query.copy()
             K_crop[0, 2] -= x0
             K_crop[1, 2] -= y0
+            K_crop = self._apply_fill_scale(chosen_ex, K_crop)
             mask = chosen_ex["mask_crop"]
             if mask is not None:
                 mask = np.asarray(mask) > 0
