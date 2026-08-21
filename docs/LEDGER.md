@@ -95,4 +95,4 @@
 - 候选：`inlier_ratio`（selection.py:50-52 已实现，未启用）→ 消融 6 加一行
 | experiments/dense80_refviews64_ctl.yaml | done | 6d-refviews64-ctl 归因结案（08-20）：cat 64v 现代配方 67.50——视图数贡献 +12.50（79%）、现代配方（锚点/深度） +3.33（21%）；**视图数是 refviews 增益主因**；cat 128v 库已从 .v128bak 恢复 |
 | experiments/dense80_vs_16x1.yaml / 24x1.yaml / 24x2.yaml | done | 6d-viewstruct 结案（08-21，判死）：fibonacci 模式 roll 冗余=真实检索覆盖（与 cube8 消融结论不迁移）；V1 -4.17 / V2 -4.50 / V3 +0.50（边际不采纳）；ape/hp 对 roll 极敏感（-10.8）；次级发现 duck 24×2 +5.83（24 视角有益，可单物体确认）；champion 维持 80t（16×5）|
-| experiments/dense80_fillnorm.yaml | running | 6d-fillnorm（08-17 登记）：查询-模板填充归一化——模板 41% vs 查询 72%（1.75× 尺度差），match_fill_norm=0.41 缩放查询裁剪对齐尺度；代码 = pipeline fill-norm 块（α 并入 s_leg 链）+ _apply_fill_scale（K_crop 前两行乘 α，11 处）+ test_fill_norm.py 5 例；弱 5 物体 120 帧子集对照跑中（基线同口径干净复跑）|
+| experiments/dense80_fillnorm.yaml | done | 6d-fillnorm 判负结案（08-21）：MEAN 59.17 vs 基线 64.67（-5.50）——duck -15.00 / ape -10.83 崩（小物体像素预算）、cat 0.00（Proj +3.34 匹配变好）、phone +0.84；**查询侧尺度两方向全判负**（放大 768/superres + 缩小 fillnorm），bbox+20% 天然尺度=信息最优；代码保留作消融档（match_fill_norm 默认 0.0）|
